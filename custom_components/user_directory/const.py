@@ -1,9 +1,9 @@
-"""Constants for Profile Extender."""
+"""Constants for ha-user-directory."""
 
 from datetime import timedelta
 from typing import Final
 
-DOMAIN: Final = "profile_extender"
+DOMAIN: Final = "user_directory"
 
 CONF_EMAIL: Final = "email"
 CONF_PHONE: Final = "phone"
@@ -31,8 +31,8 @@ STORAGE_KEY_OIDC: Final = f"{DOMAIN}.oidc"
 STORAGE_KEY_GRAVATAR: Final = f"{DOMAIN}.gravatar"
 STORAGE_VERSION: Final = 1
 
-PANEL_URL_PATH: Final = "user-extended-info"
-PANEL_COMPONENT: Final = "profile-extender-panel"
+PANEL_URL_PATH: Final = "user-directory"
+PANEL_COMPONENT: Final = "user-directory-panel"
 PANEL_ICON: Final = "mdi:card-account-details"
-PANEL_TITLE: Final = "User Extended Info"
+PANEL_TITLE: Final = "User-Directory"
 STATIC_URL: Final = f"/{DOMAIN}_static"

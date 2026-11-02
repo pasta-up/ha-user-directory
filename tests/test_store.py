@@ -2,7 +2,7 @@
 
 import pytest
 
-from custom_components.profile_extender.store import InvalidContact, clean_contact
+from custom_components.user_directory.store import InvalidContact, clean_contact
 
 
 def test_clean_contact() -> None:

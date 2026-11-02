@@ -11,7 +11,7 @@ from pytest_homeassistant_custom_component.typing import (
     WebSocketGenerator,
 )
 
-from custom_components.profile_extender.gravatar import (
+from custom_components.user_directory.gravatar import (
     gravatar_hash,
     person_collection,
 )
@@ -51,14 +51,14 @@ async def _send(client, msg: dict[str, Any]) -> dict[str, Any]:
 
 async def _set_email(client, email: str | None) -> dict[str, Any]:
     return await _send(
-        client, {"type": "profile_extender/contact/update", "email": email}
+        client, {"type": "user_directory/contact/update", "email": email}
     )
 
 
 async def _set_gravatar(client, enabled: bool, **extra: Any) -> dict[str, Any]:
     return await _send(
         client,
-        {"type": "profile_extender/gravatar/set", "enabled": enabled, **extra},
+        {"type": "user_directory/gravatar/set", "enabled": enabled, **extra},
     )
 
 
@@ -106,7 +106,7 @@ async def test_enable_and_disable(
     msg = await _set_gravatar(client, True)
     assert msg["result"]["gravatar"] == {"enabled": True, "available": True}
     picture = _picture(hass, person)
-    assert picture.startswith(f"/api/profile_extender/avatar/{hass_admin_user.id}?v=")
+    assert picture.startswith(f"/api/user_directory/avatar/{hass_admin_user.id}?v=")
     stored = person_collection(hass).data[person["id"]]
     assert stored["device_trackers"] == ["device_tracker.ada_phone"]
 

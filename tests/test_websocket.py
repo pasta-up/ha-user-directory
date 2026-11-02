@@ -13,7 +13,7 @@ async def test_own_contact(
     """A user can set, read and clear their own contact info."""
     client = await hass_ws_client(hass)
 
-    await client.send_json_auto_id({"type": "profile_extender/contact/get"})
+    await client.send_json_auto_id({"type": "user_directory/contact/get"})
     assert (await client.receive_json())["result"] == {
         "contact": {},
         "sso": [],
@@ -23,7 +23,7 @@ async def test_own_contact(
 
     await client.send_json_auto_id(
         {
-            "type": "profile_extender/contact/update",
+            "type": "user_directory/contact/update",
             "email": "ada@example.com",
             "github": "@ada",
         }
@@ -34,17 +34,17 @@ async def test_own_contact(
     }
 
     await client.send_json_auto_id(
-        {"type": "profile_extender/contact/update", "email": "nope"}
+        {"type": "user_directory/contact/update", "email": "nope"}
     )
     msg = await client.receive_json()
     assert msg["error"]["code"] == "invalid_format"
 
     # A failed update leaves the saved info alone.
-    await client.send_json_auto_id({"type": "profile_extender/contact/get"})
+    await client.send_json_auto_id({"type": "user_directory/contact/get"})
     assert (await client.receive_json())["result"]["contact"]["github"] == "ada"
 
     await client.send_json_auto_id(
-        {"type": "profile_extender/contact/update", "email": "", "github": None}
+        {"type": "user_directory/contact/update", "email": "", "github": None}
     )
     assert (await client.receive_json())["result"]["contact"] == {}
 
@@ -62,7 +62,7 @@ async def test_non_admin_limited_to_self(
 
     await client.send_json_auto_id(
         {
-            "type": "profile_extender/contact/update",
+            "type": "user_directory/contact/update",
             "user_id": hass_read_only_user.id,
             "phone": "+44 20 7946 0000",
         }
@@ -70,13 +70,13 @@ async def test_non_admin_limited_to_self(
     assert (await client.receive_json())["success"]
 
     for msg in (
-        {"type": "profile_extender/contact/get", "user_id": hass_admin_user.id},
+        {"type": "user_directory/contact/get", "user_id": hass_admin_user.id},
         {
-            "type": "profile_extender/contact/update",
+            "type": "user_directory/contact/update",
             "user_id": hass_admin_user.id,
             "email": "x@example.com",
         },
-        {"type": "profile_extender/contact/list"},
+        {"type": "user_directory/contact/list"},
     ):
         await client.send_json_auto_id(msg)
         assert (await client.receive_json())["error"]["code"] == "unauthorized"
@@ -93,7 +93,7 @@ async def test_admin_manages_others(
 
     await client.send_json_auto_id(
         {
-            "type": "profile_extender/contact/update",
+            "type": "user_directory/contact/update",
             "user_id": hass_read_only_user.id,
             "email": "bob@example.com",
         }
@@ -101,18 +101,18 @@ async def test_admin_manages_others(
     assert (await client.receive_json())["success"]
 
     await client.send_json_auto_id(
-        {"type": "profile_extender/contact/get", "user_id": hass_read_only_user.id}
+        {"type": "user_directory/contact/get", "user_id": hass_read_only_user.id}
     )
     assert (await client.receive_json())["result"]["contact"] == {
         "email": "bob@example.com"
     }
 
-    await client.send_json_auto_id({"type": "profile_extender/contact/list"})
+    await client.send_json_auto_id({"type": "user_directory/contact/list"})
     assert (await client.receive_json())["result"] == {
         hass_read_only_user.id: {"email": "bob@example.com"}
     }
 
     await client.send_json_auto_id(
-        {"type": "profile_extender/contact/get", "user_id": "missing"}
+        {"type": "user_directory/contact/get", "user_id": "missing"}
     )
     assert (await client.receive_json())["error"]["code"] == "not_found"

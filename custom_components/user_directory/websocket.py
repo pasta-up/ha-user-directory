@@ -34,7 +34,7 @@ async def _async_target(
 ) -> tuple[ContactStore, str] | None:
     """Return the store and the user to act on, or send an error and return None."""
     if (store := hass.data.get(DATA_STORE)) is None:
-        connection.send_error(msg["id"], "not_loaded", "Profile Extender is not loaded")
+        connection.send_error(msg["id"], "not_loaded", "ha-user-directory is not loaded")
         return None
     user_id: str = msg.get(CONF_USER_ID) or connection.user.id
     if user_id == connection.user.id:
@@ -125,7 +125,7 @@ def ws_list(
 ) -> None:
     """Return every user's contact info. Admins only."""
     if (store := hass.data.get(DATA_STORE)) is None:
-        connection.send_error(msg["id"], "not_loaded", "Profile Extender is not loaded")
+        connection.send_error(msg["id"], "not_loaded", "ha-user-directory is not loaded")
         return
     connection.send_result(msg["id"], store.all())
 

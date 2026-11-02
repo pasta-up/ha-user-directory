@@ -8,7 +8,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUs
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
-from custom_components.profile_extender.const import (
+from custom_components.user_directory.const import (
     CONF_AUTHENTIK_TOKEN,
     CONF_OIDC_ENABLED,
     CONF_OIDC_ENFORCE,
@@ -91,7 +91,7 @@ async def _setup(hass: HomeAssistant, options: dict) -> MockConfigEntry:
 
 async def _get(client, user: User) -> dict:
     await client.send_json_auto_id(
-        {"type": "profile_extender/contact/get", "user_id": user.id}
+        {"type": "user_directory/contact/get", "user_id": user.id}
     )
     return (await client.receive_json())["result"]
 
@@ -164,7 +164,7 @@ async def test_sso_fills_empty_fields(
 
     await client.send_json_auto_id(
         {
-            "type": "profile_extender/contact/update",
+            "type": "user_directory/contact/update",
             "user_id": sso_user.id,
             "email": "ada@home.example",
         }
@@ -175,7 +175,7 @@ async def test_sso_fills_empty_fields(
 
     # Clearing the override shows the SSO value again.
     await client.send_json_auto_id(
-        {"type": "profile_extender/contact/update", "user_id": sso_user.id}
+        {"type": "user_directory/contact/update", "user_id": sso_user.id}
     )
     assert (await client.receive_json())["result"]["sso"] == ["email"]
 
@@ -193,7 +193,7 @@ async def test_sso_enforced(
 
     await client.send_json_auto_id(
         {
-            "type": "profile_extender/contact/update",
+            "type": "user_directory/contact/update",
             "user_id": sso_user.id,
             "email": "ada@home.example",
         }
@@ -202,7 +202,7 @@ async def test_sso_enforced(
 
     await client.send_json_auto_id(
         {
-            "type": "profile_extender/contact/update",
+            "type": "user_directory/contact/update",
             "user_id": sso_user.id,
             "email": "ada@sso.example",
             "phone": "+1 555 123 4567",

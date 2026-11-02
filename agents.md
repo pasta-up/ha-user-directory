@@ -8,17 +8,17 @@
 
 ## Design
 
-- Custom integration (domain `profile_extender`), distributed via HACS/Marketplace as a
+- Custom integration (domain `user_directory`), distributed via HACS/Marketplace as a
   custom repository. Not a core candidate: core only accepts integrations for a device or service.
 - HA's built-in profile page can't be extended by integrations without patching the
-  frontend, so the UI is a separate sidebar panel "User Extended Info"
-  (`panel_custom`, `require_admin=False`) at `/user-extended-info`. JS is a plain web
+  frontend, so the UI is a separate sidebar panel "User-Directory"
+  (`panel_custom`, `require_admin=False`) at `/user-directory`. JS is a plain web
   component in `frontend/`, no build step, styled with HA theme CSS variables rather
   than HA's internal elements (those rename often).
 - Single config entry. Options flow (admin-only by HA design) holds the SSO settings.
 - Data, both `private=True`, `{user_id: {email?, phone?, github?}}`:
-  - `.storage/profile_extender.contacts`: what users/admins entered.
-  - `.storage/profile_extender.oidc`: last values fetched from SSO.
+  - `.storage/user_directory.contacts`: what users/admins entered.
+  - `.storage/user_directory.oidc`: last values fetched from SSO.
   Kept apart so toggling enforcement never loses user input.
 - Cleanup: `user_removed` deletes that user from both (only while loaded);
   `async_remove_entry` deletes both files; turning SSO off deletes the SSO file and token.
@@ -29,9 +29,9 @@ All enforced server-side in `websocket.py`:
 
 | Command | Who |
 | --- | --- |
-| `profile_extender/contact/get` `{user_id?}` | self; admin for others |
-| `profile_extender/contact/update` `{user_id?, email?, phone?, github?}` | self; admin for others |
-| `profile_extender/contact/list` | admin |
+| `user_directory/contact/get` `{user_id?}` | self; admin for others |
+| `user_directory/contact/update` `{user_id?, email?, phone?, github?}` | self; admin for others |
+| `user_directory/contact/list` | admin |
 
 get/update return `{contact, sso: [fields showing SSO values], locked: [fields]}`.
 `update` replaces the whole manual contact: omitted fields are cleared. Values equal to
@@ -70,13 +70,13 @@ Replaces the retired `pasta-up/ha-gravatar-sync` (code in `gravatar.py` is porte
 - HA shows a user's avatar from their linked person, so we set the picture of the
   UI-managed person whose `user_id` matches. YAML persons can't be changed (`no_person`).
 - Email = the effective contact email (manual or SSO). Gravatar gets only its SHA-256 hash.
-- `profile_extender/gravatar/set {user_id?, enabled}`: same owner-or-admin rule. Enabling
+- `user_directory/gravatar/set {user_id?, enabled}`: same owner-or-admin rule. Enabling
   fetches immediately; errors `no_person`, `no_email`, `no_gravatar`, `cannot_connect`.
-- Avatar cached in `.storage/profile_extender/avatars/<user_id>` and served by
-  `AvatarView` at `/api/profile_extender/avatar/<user_id>?v=<digest>` **without auth**:
+- Avatar cached in `.storage/user_directory/avatars/<user_id>` and served by
+  `AvatarView` at `/api/user_directory/avatar/<user_id>?v=<digest>` **without auth**:
   browsers load person pictures with plain `<img>`, like core's `/api/image/serve`.
   Only images already public on Gravatar are served.
-- `.storage/profile_extender.gravatar`: `{user_id: {email, original_picture}}`.
+- `.storage/user_directory.gravatar`: `{user_id: {email, original_picture}}`.
   Off/removal restores `original_picture` only if the picture is still ours.
 - Refresh: every 6h (forced); after contact updates and SSO syncs, only users whose
   email changed. Email gone -> Gravatar turned off. Unreachable/404 keeps the last avatar.

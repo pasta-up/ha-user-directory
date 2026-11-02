@@ -1,4 +1,4 @@
-"""Config and options flows for Profile Extender."""
+"""Config and options flows for ha-user-directory."""
 
 from __future__ import annotations
 
@@ -35,8 +35,8 @@ from .const import (
 from .oidc import AuthentikSync, OidcError, active_providers
 
 
-class ProfileExtenderConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Add Profile Extender. SSO is set up afterwards under Configure."""
+class UserDirectoryConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Add ha-user-directory. SSO is set up afterwards under Configure."""
 
     VERSION = 1
 
@@ -51,12 +51,12 @@ class ProfileExtenderConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     @override
-    def async_get_options_flow(config_entry: ConfigEntry) -> ProfileExtenderOptionsFlow:
+    def async_get_options_flow(config_entry: ConfigEntry) -> UserDirectoryOptionsFlow:
         """Create the options flow."""
-        return ProfileExtenderOptionsFlow()
+        return UserDirectoryOptionsFlow()
 
 
-class ProfileExtenderOptionsFlow(OptionsFlowWithReload):
+class UserDirectoryOptionsFlow(OptionsFlowWithReload):
     """Turn SSO contact sync on or off. Options flows are admin-only."""
 
     async def async_step_init(

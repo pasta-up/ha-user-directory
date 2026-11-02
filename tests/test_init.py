@@ -4,8 +4,8 @@ from typing import Any
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.profile_extender.const import PANEL_URL_PATH, STORAGE_KEY
-from custom_components.profile_extender.websocket import DATA_STORE
+from custom_components.user_directory.const import PANEL_URL_PATH, STORAGE_KEY
+from custom_components.user_directory.websocket import DATA_STORE
 from homeassistant.auth.models import User
 from homeassistant.components.frontend import DATA_PANELS
 from homeassistant.core import HomeAssistant

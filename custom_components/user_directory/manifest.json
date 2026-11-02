@@ -1,6 +1,6 @@
 {
-  "domain": "profile_extender",
-  "name": "Profile Extender",
+  "domain": "user_directory",
+  "name": "ha-user-directory",
   "categories": ["productivity_information"],
   "codeowners": ["@pasta-up"],
   "config_flow": true,
@@ -11,10 +11,10 @@
     "person",
     "websocket_api"
   ],
-  "documentation": "https://github.com/pasta-up/ha-profile-extender",
+  "documentation": "https://github.com/pasta-up/ha-user-directory",
   "integration_type": "service",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/pasta-up/ha-profile-extender/issues",
+  "issue_tracker": "https://github.com/pasta-up/ha-user-directory/issues",
   "requirements": [],
   "single_config_entry": true,
   "version": "0.1.1"

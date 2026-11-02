@@ -2,12 +2,12 @@
   "config": {
     "step": {
       "user": {
-        "title": "Profile Extender",
-        "description": "Adds a User Extended Info page to the sidebar where each user can set their email, phone and GitHub username."
+        "title": "ha-user-directory",
+        "description": "Adds a User-Directory page to the sidebar where each user can set their email, phone and GitHub username."
       }
     },
     "abort": {
-      "single_instance_allowed": "Profile Extender is already set up."
+      "single_instance_allowed": "ha-user-directory is already set up."
     }
   },
   "options": {

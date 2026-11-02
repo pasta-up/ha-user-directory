@@ -24,7 +24,7 @@ const TEMPLATE = `
     .hint { font-size: 12px; color: var(--secondary-text-color); margin-top: 16px; }
     [hidden] { display: none; }
   </style>
-  <header><ha-menu-button></ha-menu-button><span>User Extended Info</span></header>
+  <header><ha-menu-button></ha-menu-button><span>User-Directory</span></header>
   <form class="card">
     <div id="user-row" hidden>
       <label for="user">User</label>
@@ -38,7 +38,7 @@ const TEMPLATE = `
   </form>
 `;
 
-class ProfileExtenderPanel extends HTMLElement {
+class UserDirectoryPanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" }).innerHTML = TEMPLATE;
@@ -92,7 +92,7 @@ class ProfileExtenderPanel extends HTMLElement {
   async _load() {
     this._status("");
     try {
-      this._show(await this._hass.callWS({ type: "profile_extender/contact/get", user_id: this._userId }));
+      this._show(await this._hass.callWS({ type: "user_directory/contact/get", user_id: this._userId }));
     } catch (err) {
       this._status(err.message, true);
     }
@@ -100,7 +100,7 @@ class ProfileExtenderPanel extends HTMLElement {
 
   async _save() {
     const button = this.shadowRoot.querySelector("button");
-    const msg = { type: "profile_extender/contact/update", user_id: this._userId };
+    const msg = { type: "user_directory/contact/update", user_id: this._userId };
     FIELDS.forEach((f) => { msg[f.key] = this.shadowRoot.getElementById(f.key).value; });
     button.disabled = true;
     try {
@@ -117,7 +117,7 @@ class ProfileExtenderPanel extends HTMLElement {
     box.disabled = true;
     this._status("");
     try {
-      this._show(await this._hass.callWS({ type: "profile_extender/gravatar/set", user_id: this._userId, enabled: box.checked }));
+      this._show(await this._hass.callWS({ type: "user_directory/gravatar/set", user_id: this._userId, enabled: box.checked }));
     } catch (err) {
       box.checked = !box.checked;
       box.disabled = false;
@@ -151,4 +151,4 @@ class ProfileExtenderPanel extends HTMLElement {
   }
 }
 
-customElements.define("profile-extender-panel", ProfileExtenderPanel);
+customElements.define("user-directory-panel", UserDirectoryPanel);

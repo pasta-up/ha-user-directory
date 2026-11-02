@@ -1,6 +1,6 @@
 """Tests for the config flow."""
 
-from custom_components.profile_extender.const import DOMAIN
+from custom_components.user_directory.const import DOMAIN
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType

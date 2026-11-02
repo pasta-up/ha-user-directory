@@ -1,1 +1,1 @@
-"""Tests for Profile Extender."""
+"""Tests for ha-user-directory."""

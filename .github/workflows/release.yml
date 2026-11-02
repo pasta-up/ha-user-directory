@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v5
       # HACS compares installed and released versions, so these must agree.
       - run: |
-          manifest=$(jq -r .version custom_components/profile_extender/manifest.json)
+          manifest=$(jq -r .version custom_components/user_directory/manifest.json)
           tag="${GITHUB_REF_NAME#v}"
           if [ "$manifest" != "$tag" ]; then
             echo "::error::Release $GITHUB_REF_NAME doesn't match manifest version $manifest"
