@@ -123,6 +123,10 @@ Replaces the retired `pasta-up/ha-gravatar-sync` (code in `gravatar.py` is porte
 - Optional. Admin sets SMTP (server, STARTTLS/SSL/none, port, login, from) under
   Configure > Email verification; saving tests connect + login. Blank password keeps
   the saved one; blank server removes all SMTP options. Password is plain text in options.
+- "Send a test email" menu item (only once SMTP is saved) sends with the saved settings.
+  Recipient defaults to the admin's own contact email, found via `current_request`
+  (options flows don't record the user; core's Plex flow does the same). Failures show
+  the SMTP server's message, since only admins see it.
 - `send_code` emails a 6-digit code (`secrets`) to the *saved* email; `confirm` checks it
   (`hmac.compare_digest`). Codes are in memory only: 15 min, 5 guesses, 1 min before
   resending to the same address, 5 codes per user per hour.

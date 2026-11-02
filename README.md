@@ -35,7 +35,7 @@ users choose for themselves (default), SSO users always, or everyone.
 ## Email verification (optional)
 
 An admin sets up an SMTP server under **ha-user-directory** > **Configure** >
-**Email verification**. Users can then click **Email me a code** under their email in
+**Email verification**, then checks it with **Send a test email**. Users can then click **Email me a code** under their email in
 **My info** and enter the code to verify it. Verified emails get a ✓ in the directory.
 Emails from SSO count as verified.
 

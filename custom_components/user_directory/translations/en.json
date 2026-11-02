@@ -17,7 +17,15 @@
         "menu_options": {
           "directory": "Directory",
           "sso": "Single sign-on",
-          "email": "Email verification"
+          "email": "Email verification",
+          "email_test": "Send a test email"
+        }
+      },
+      "email_test": {
+        "title": "Send a test email",
+        "description": "Sends an email using the saved email verification settings.{detail}",
+        "data": {
+          "test_recipient": "Send to"
         }
       },
       "directory": {
@@ -68,9 +76,13 @@
       "invalid_token": "Authentik rejected the API token, or it can't view users.",
       "cannot_connect": "Can't reach the SSO identity provider.",
       "unsupported_idp": "The SSO identity provider isn't Authentik. Only Authentik is supported.",
-      "invalid_sender": "Enter a valid email address.",
+      "invalid_email": "Enter a valid email address.",
       "smtp_cannot_connect": "Can't connect to the SMTP server. Check the server, port and encryption.",
-      "smtp_auth_failed": "The SMTP server rejected the username or password."
+      "smtp_auth_failed": "The SMTP server rejected the username or password.",
+      "smtp_send_failed": "The SMTP server wouldn't send the email. Check the from address and that the server allows it."
+    },
+    "abort": {
+      "test_sent": "Test email sent to {email}. If it doesn't arrive, check the spam folder and the server's logs."
     }
   },
   "selector": {

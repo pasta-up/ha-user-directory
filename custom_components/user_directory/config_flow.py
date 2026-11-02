@@ -14,6 +14,7 @@ from homeassistant.config_entries import (
     OptionsFlowWithReload,
 )
 from homeassistant.core import callback
+from homeassistant.helpers.http import current_request
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -52,6 +53,9 @@ from .const import (
 from .mail import Mailer, MailError, SmtpConfig
 from .oidc import AuthentikSync, OidcError, active_providers
 from .store import InvalidContact, clean_contact
+from .websocket import DATA_STORE
+
+CONF_TEST_RECIPIENT = "test_recipient"
 
 
 class UserDirectoryConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -82,9 +86,10 @@ class UserDirectoryOptionsFlow(OptionsFlowWithReload):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Pick which settings to change."""
-        return self.async_show_menu(
-            step_id="init", menu_options=["directory", "sso", "email"]
-        )
+        menu = ["directory", "sso", "email"]
+        if SmtpConfig.from_options(self.config_entry.options):
+            menu.append("email_test")
+        return self.async_show_menu(step_id="init", menu_options=menu)
 
     def _save(
         self, changes: dict[str, Any], drop: tuple[str, ...] = ()
@@ -207,7 +212,7 @@ class UserDirectoryOptionsFlow(OptionsFlowWithReload):
             except InvalidContact:
                 valid = False
             if not valid:
-                errors[CONF_SMTP_SENDER] = "invalid_sender"
+                errors[CONF_SMTP_SENDER] = "invalid_email"
             else:
                 config = SmtpConfig.from_options(smtp)
                 assert config is not None
@@ -254,6 +259,64 @@ class UserDirectoryOptionsFlow(OptionsFlowWithReload):
                 "password_saved": "yes" if current.get(CONF_SMTP_PASSWORD) else "no",
             },
         )
+
+    async def async_step_email_test(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Send a test email with the saved SMTP settings."""
+        errors: dict[str, str] = {}
+        detail = ""
+        if user_input is not None:
+            to = user_input.get(CONF_TEST_RECIPIENT, "")
+            try:
+                valid = bool(clean_contact({CONF_EMAIL: to}))
+            except InvalidContact:
+                valid = False
+            if not valid:
+                errors[CONF_TEST_RECIPIENT] = "invalid_email"
+            else:
+                config = SmtpConfig.from_options(self.config_entry.options)
+                assert config is not None
+                try:
+                    await Mailer(self.hass, config).async_send(
+                        to,
+                        "Test email from Home Assistant",
+                        "ha-user-directory can send email. Verification codes"
+                        " will come from this address.\n",
+                    )
+                except MailError as err:
+                    errors["base"] = str(err)
+                    # Admins only, so the server's own message is safe to show.
+                    detail = f"\n\nServer said: {err.__cause__}"
+                else:
+                    return self.async_abort(
+                        reason="test_sent", description_placeholders={"email": to}
+                    )
+
+        schema = probatio.Schema(
+            {
+                probatio.Required(CONF_TEST_RECIPIENT): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.EMAIL)
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="email_test",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input or {CONF_TEST_RECIPIENT: self._admin_email()}
+            ),
+            errors=errors,
+            description_placeholders={"detail": detail},
+        )
+
+    def _admin_email(self) -> str:
+        """Return the email of the admin using this dialog, if they've set one."""
+        # Options flows don't record who opened them; core's Plex flow reads the request too.
+        request = current_request.get()
+        store = self.hass.data.get(DATA_STORE)
+        if request is None or store is None:
+            return ""
+        return store.get(request["hass_user"].id).get(CONF_EMAIL, "")
 
 
 def _without(values: Mapping[str, Any], key: str) -> dict[str, Any]:

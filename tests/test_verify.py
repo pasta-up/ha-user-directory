@@ -11,6 +11,7 @@ from custom_components.user_directory.const import DOMAIN
 from homeassistant.auth.models import User
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers.http import current_request
 
 from .conftest import SMTP, sent_code
 
@@ -209,7 +210,7 @@ async def test_options(hass: HomeAssistant, smtp: MagicMock) -> None:
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {**settings, "smtp_sender": "nope"}
     )
-    assert result["errors"] == {"smtp_sender": "invalid_sender"}
+    assert result["errors"] == {"smtp_sender": "invalid_email"}
 
     smtp.return_value.login.side_effect = smtplib.SMTPAuthenticationError(535, b"")
     result = await hass.config_entries.options.async_configure(
@@ -249,3 +250,55 @@ async def test_options(hass: HomeAssistant, smtp: MagicMock) -> None:
         result["flow_id"], {"smtp_security": "starttls"}
     )
     assert entry.options == {"publish_policy": "all"}
+
+
+async def test_send_test_email(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    hass_ws_client: WebSocketGenerator,
+    hass_admin_user: User,
+    smtp: MagicMock,
+) -> None:
+    """Admins can send a test email, to their own email by default."""
+    client = await hass_ws_client(hass)
+    await _set_email(client, EMAIL)
+
+    # Options flows don't record the user; the dialog's HTTP request does.
+    token = current_request.set({"hass_user": hass_admin_user})
+    try:
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        assert "email_test" in result["menu_options"]
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "email_test"}
+        )
+    finally:
+        current_request.reset(token)
+    schema = result["data_schema"].schema
+    assert next(iter(schema)).description == {"suggested_value": EMAIL}
+
+    smtp.return_value.send_message.side_effect = smtplib.SMTPDataError(
+        554, b"Sender rejected"
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"test_recipient": "grace@example.com"}
+    )
+    assert result["errors"] == {"base": "smtp_send_failed"}
+    assert "Sender rejected" in result["description_placeholders"]["detail"]
+
+    smtp.return_value.send_message.side_effect = None
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"test_recipient": "grace@example.com"}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "test_sent"
+    assert smtp.return_value.send_message.call_args.args[0]["To"] == (
+        "grace@example.com"
+    )
+
+
+async def test_no_test_without_smtp(hass: HomeAssistant) -> None:
+    """The test button only shows once email is set up."""
+    entry = MockConfigEntry(domain=DOMAIN)
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert "email_test" not in result["menu_options"]
