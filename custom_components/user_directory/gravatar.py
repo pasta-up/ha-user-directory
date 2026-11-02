@@ -67,6 +67,14 @@ class NoEmail(GravatarError):
         super().__init__("no_email")
 
 
+class NotVerified(GravatarError):
+    """The email isn't verified."""
+
+    def __init__(self) -> None:
+        """Set the error code."""
+        super().__init__("not_verified")
+
+
 class NoGravatar(GravatarError):
     """The email has no Gravatar."""
 
@@ -177,13 +185,17 @@ class GravatarManager:
         """Return a user's cached avatar."""
         return self._avatars.get(user_id)
 
-    async def async_enable(self, user_id: str, email: str | None) -> None:
+    async def async_enable(
+        self, user_id: str, email: str | None, *, verified: bool
+    ) -> None:
         """Turn Gravatar on and apply it now. Raises GravatarError if it can't."""
         async with self._lock:
             if person_for_user(self._hass, user_id) is None:
                 raise NoPerson
             if not email:
                 raise NoEmail
+            if not verified:
+                raise NotVerified
             avatar = await self._async_fetch(email)
             if avatar is None:
                 raise NoGravatar
@@ -207,11 +219,14 @@ class GravatarManager:
     async def async_refresh(
         self, email_for: Callable[[str], str | None], *, force: bool = False
     ) -> None:
-        """Re-fetch avatars for enabled users; without force, only if their email changed."""
+        """Re-fetch avatars for enabled users; without force, only if their email changed.
+
+        email_for returns the user's verified email, or None.
+        """
         for user_id in list(self._users):
             email = email_for(user_id)
             if not email:
-                # No email any more, so there's no Gravatar to show.
+                # No verified email any more, so no Gravatar.
                 await self.async_disable(user_id)
                 continue
             if not force and self._users[user_id].get(_EMAIL) == email:

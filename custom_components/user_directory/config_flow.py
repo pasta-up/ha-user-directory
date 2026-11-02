@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, override
 
 import probatio
@@ -15,6 +16,9 @@ from homeassistant.config_entries import (
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
     BooleanSelector,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
@@ -26,16 +30,28 @@ from homeassistant.helpers.selector import (
 
 from .const import (
     CONF_AUTHENTIK_TOKEN,
+    CONF_EMAIL,
     CONF_OIDC_ENABLED,
     CONF_OIDC_ENFORCE,
     CONF_OIDC_PROVIDER,
     CONF_PUBLISH_POLICY,
+    CONF_SMTP_HOST,
+    CONF_SMTP_PASSWORD,
+    CONF_SMTP_PORT,
+    CONF_SMTP_SECURITY,
+    CONF_SMTP_SENDER,
+    CONF_SMTP_USERNAME,
     DOMAIN,
     INTEGRATION_TITLE,
     POLICIES,
     POLICY_CHOICE,
+    SECURITY_STARTTLS,
+    SMTP_OPTIONS,
+    SMTP_PORTS,
 )
+from .mail import Mailer, MailError, SmtpConfig
 from .oidc import AuthentikSync, OidcError, active_providers
+from .store import InvalidContact, clean_contact
 
 
 class UserDirectoryConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -60,30 +76,67 @@ class UserDirectoryConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class UserDirectoryOptionsFlow(OptionsFlowWithReload):
-    """Directory policy and SSO contact sync. Options flows are admin-only."""
+    """Directory policy, SSO and email settings. Options flows are admin-only."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage the directory policy and SSO settings."""
+        """Pick which settings to change."""
+        return self.async_show_menu(
+            step_id="init", menu_options=["directory", "sso", "email"]
+        )
+
+    def _save(
+        self, changes: dict[str, Any], drop: tuple[str, ...] = ()
+    ) -> ConfigFlowResult:
+        """Save changes on top of the other steps' options."""
+        options = {k: v for k, v in self.config_entry.options.items() if k not in drop}
+        return self.async_create_entry(data={**options, **changes})
+
+    async def async_step_directory(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose who is listed."""
+        if user_input is not None:
+            return self._save(user_input)
+        schema = probatio.Schema(
+            {
+                probatio.Required(
+                    CONF_PUBLISH_POLICY, default=POLICY_CHOICE
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=list(POLICIES),
+                        mode=SelectSelectorMode.LIST,
+                        translation_key=CONF_PUBLISH_POLICY,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="directory",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, self.config_entry.options
+            ),
+        )
+
+    async def async_step_sso(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage SSO contact sync."""
         providers = active_providers(self.hass)
         current = self.config_entry.options
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            if not user_input[CONF_OIDC_ENABLED]:
+                return self._save(
+                    {CONF_OIDC_ENABLED: False, CONF_OIDC_ENFORCE: False},
+                    drop=(CONF_OIDC_PROVIDER, CONF_AUTHENTIK_TOKEN),
+                )
             # A blank token keeps the saved one, so admins needn't re-enter it.
             token = user_input.get(CONF_AUTHENTIK_TOKEN) or current.get(
                 CONF_AUTHENTIK_TOKEN
             )
-            options = {**user_input, CONF_AUTHENTIK_TOKEN: token}
-            if not user_input[CONF_OIDC_ENABLED]:
-                return self.async_create_entry(
-                    data={
-                        CONF_PUBLISH_POLICY: user_input[CONF_PUBLISH_POLICY],
-                        CONF_OIDC_ENABLED: False,
-                        CONF_OIDC_ENFORCE: False,
-                    }
-                )
             if not providers:
                 errors["base"] = "provider_not_active"
             elif not token:
@@ -94,18 +147,9 @@ class UserDirectoryOptionsFlow(OptionsFlowWithReload):
                 except OidcError as err:
                     errors["base"] = str(err)
                 else:
-                    return self.async_create_entry(data=options)
+                    return self._save({**user_input, CONF_AUTHENTIK_TOKEN: token})
 
         schema: dict[Any, Any] = {
-            probatio.Required(
-                CONF_PUBLISH_POLICY, default=POLICY_CHOICE
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=list(POLICIES),
-                    mode=SelectSelectorMode.LIST,
-                    translation_key=CONF_PUBLISH_POLICY,
-                )
-            ),
             probatio.Required(CONF_OIDC_ENABLED, default=False): BooleanSelector(),
         }
         if providers:
@@ -127,15 +171,11 @@ class UserDirectoryOptionsFlow(OptionsFlowWithReload):
                 BooleanSelector()
             )
 
-        suggested = {
-            k: v
-            for k, v in (user_input or current).items()
-            if k != CONF_AUTHENTIK_TOKEN
-        }
         return self.async_show_form(
-            step_id="init",
+            step_id="sso",
             data_schema=self.add_suggested_values_to_schema(
-                probatio.Schema(schema), suggested
+                probatio.Schema(schema),
+                _without(user_input or current, CONF_AUTHENTIK_TOKEN),
             ),
             errors=errors,
             description_placeholders={
@@ -143,3 +183,78 @@ class UserDirectoryOptionsFlow(OptionsFlowWithReload):
                 "token_saved": "yes" if current.get(CONF_AUTHENTIK_TOKEN) else "no",
             },
         )
+
+    async def async_step_email(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Set up the SMTP server that sends verification codes."""
+        current = self.config_entry.options
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            if not user_input.get(CONF_SMTP_HOST):
+                return self._save({}, drop=SMTP_OPTIONS)
+            smtp = {k: v for k, v in user_input.items() if v not in (None, "")}
+            if CONF_SMTP_PORT in smtp:
+                smtp[CONF_SMTP_PORT] = int(smtp[CONF_SMTP_PORT])
+            # A blank password keeps the saved one, like the SSO token.
+            if CONF_SMTP_PASSWORD not in smtp and current.get(CONF_SMTP_PASSWORD):
+                smtp[CONF_SMTP_PASSWORD] = current[CONF_SMTP_PASSWORD]
+            if not smtp.get(CONF_SMTP_USERNAME):
+                smtp.pop(CONF_SMTP_PASSWORD, None)
+            try:
+                valid = bool(clean_contact({CONF_EMAIL: smtp.get(CONF_SMTP_SENDER)}))
+            except InvalidContact:
+                valid = False
+            if not valid:
+                errors[CONF_SMTP_SENDER] = "invalid_sender"
+            else:
+                config = SmtpConfig.from_options(smtp)
+                assert config is not None
+                try:
+                    await Mailer(self.hass, config).async_test()
+                except MailError as err:
+                    errors["base"] = str(err)
+                else:
+                    return self._save(smtp, drop=SMTP_OPTIONS)
+
+        schema = probatio.Schema(
+            {
+                probatio.Optional(CONF_SMTP_HOST): TextSelector(),
+                probatio.Required(
+                    CONF_SMTP_SECURITY, default=SECURITY_STARTTLS
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=list(SMTP_PORTS),
+                        mode=SelectSelectorMode.DROPDOWN,
+                        translation_key=CONF_SMTP_SECURITY,
+                    )
+                ),
+                probatio.Optional(CONF_SMTP_PORT): NumberSelector(
+                    NumberSelectorConfig(
+                        min=1, max=65535, step=1, mode=NumberSelectorMode.BOX
+                    )
+                ),
+                probatio.Optional(CONF_SMTP_USERNAME): TextSelector(),
+                probatio.Optional(CONF_SMTP_PASSWORD): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                ),
+                probatio.Optional(CONF_SMTP_SENDER): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.EMAIL)
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="email",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, _without(user_input or current, CONF_SMTP_PASSWORD)
+            ),
+            errors=errors,
+            description_placeholders={
+                "password_saved": "yes" if current.get(CONF_SMTP_PASSWORD) else "no",
+            },
+        )
+
+
+def _without(values: Mapping[str, Any], key: str) -> dict[str, Any]:
+    return {k: v for k, v in values.items() if k != key}

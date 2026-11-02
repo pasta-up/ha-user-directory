@@ -15,6 +15,12 @@ from .const import CONF_EMAIL, CONTACT_FIELDS, DOMAIN, SOCIAL_FIELDS
 from .directory import async_directory, is_listed, listed_locked
 from .gravatar import DATA_GRAVATAR, GravatarError
 from .store import ContactStore, InvalidContact, clean_contact
+from .verify import (
+    DATA_VERIFIER,
+    VerifyError,
+    verified_email,
+    verified_email_getter,
+)
 
 DATA_STORE: HassKey[ContactStore] = HassKey(DOMAIN)
 
@@ -31,6 +37,8 @@ def async_register_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_list)
     websocket_api.async_register_command(hass, ws_gravatar_set)
     websocket_api.async_register_command(hass, ws_directory)
+    websocket_api.async_register_command(hass, ws_send_code)
+    websocket_api.async_register_command(hass, ws_confirm_code)
 
 
 async def _async_target(
@@ -57,10 +65,13 @@ async def _async_result(
     hass: HomeAssistant, store: ContactStore, user_id: str
 ) -> dict[str, Any]:
     gravatar = hass.data[DATA_GRAVATAR]
+    verifier = hass.data[DATA_VERIFIER]
     user = await hass.auth.async_get_user(user_id)
     assert user is not None
+    contact = store.get(user_id)
+    email = contact.get(CONF_EMAIL)
     return {
-        "contact": store.get(user_id),
+        "contact": contact,
         "sso": store.sso_fields(user_id),
         "locked": store.locked_fields(user_id),
         CONF_LISTED: is_listed(store, user),
@@ -69,6 +80,11 @@ async def _async_result(
         "gravatar": {
             "enabled": gravatar.enabled(user_id),
             "available": gravatar.available(user_id),
+        },
+        "email_verification": {
+            "available": verifier.available,
+            "verified": verified_email(store, verifier, user_id) is not None,
+            "pending": bool(email) and verifier.pending(user_id, email),
         },
     }
 
@@ -139,9 +155,9 @@ async def ws_update(
         await store.async_set_settings(
             user_id, listed=msg.get(CONF_LISTED), shared=msg.get(CONF_SHARED)
         )
-    # A new email means a new Gravatar; no email turns Gravatar off.
+    # A new email means a new Gravatar; no verified email turns Gravatar off.
     await hass.data[DATA_GRAVATAR].async_refresh(
-        lambda uid: store.get(uid).get(CONF_EMAIL)
+        verified_email_getter(store, hass.data[DATA_VERIFIER])
     )
     connection.send_result(msg["id"], await _async_result(hass, store, user_id))
 
@@ -179,7 +195,12 @@ async def ws_gravatar_set(
     gravatar = hass.data[DATA_GRAVATAR]
     try:
         if msg["enabled"]:
-            await gravatar.async_enable(user_id, store.get(user_id).get(CONF_EMAIL))
+            await gravatar.async_enable(
+                user_id,
+                store.get(user_id).get(CONF_EMAIL),
+                verified=verified_email(store, hass.data[DATA_VERIFIER], user_id)
+                is not None,
+            )
         else:
             await gravatar.async_disable(user_id)
     except GravatarError as err:
@@ -191,6 +212,7 @@ async def ws_gravatar_set(
 _GRAVATAR_ERRORS = {
     "no_person": "No person is linked to this user, or it's defined in YAML",
     "no_email": "Add an email address first",
+    "not_verified": "Verify your email address first",
     "no_gravatar": "This email has no Gravatar",
     "cannot_connect": "Can't reach Gravatar",
 }
@@ -209,4 +231,74 @@ async def ws_directory(
             msg["id"], "not_loaded", "ha-user-directory is not loaded"
         )
         return
-    connection.send_result(msg["id"], await async_directory(hass, store))
+    connection.send_result(
+        msg["id"], await async_directory(hass, store, hass.data[DATA_VERIFIER])
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        probatio.Required("type"): f"{DOMAIN}/email/send_code",
+        probatio.Optional(CONF_USER_ID): str,
+    }
+)
+@websocket_api.async_response
+async def ws_send_code(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Email a verification code to the user's saved email."""
+    if not (target := await _async_target(hass, connection, msg)):
+        return
+    store, user_id = target
+    if not (email := store.get(user_id).get(CONF_EMAIL)):
+        connection.send_error(msg["id"], "no_email", "Add an email address first")
+        return
+    if verified_email(store, hass.data[DATA_VERIFIER], user_id):
+        connection.send_error(
+            msg["id"], "already_verified", _VERIFY_ERRORS["already_verified"]
+        )
+        return
+    try:
+        await hass.data[DATA_VERIFIER].async_send_code(user_id, email)
+    except VerifyError as err:
+        connection.send_error(msg["id"], str(err), _VERIFY_ERRORS[str(err)])
+        return
+    connection.send_result(msg["id"], await _async_result(hass, store, user_id))
+
+
+@websocket_api.websocket_command(
+    {
+        probatio.Required("type"): f"{DOMAIN}/email/confirm",
+        probatio.Optional(CONF_USER_ID): str,
+        probatio.Required("code"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_confirm_code(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Check a code and mark the user's saved email verified."""
+    if not (target := await _async_target(hass, connection, msg)):
+        return
+    store, user_id = target
+    if not (email := store.get(user_id).get(CONF_EMAIL)):
+        connection.send_error(msg["id"], "no_email", "Add an email address first")
+        return
+    try:
+        await hass.data[DATA_VERIFIER].async_confirm(user_id, email, msg["code"])
+    except VerifyError as err:
+        connection.send_error(msg["id"], str(err), _VERIFY_ERRORS[str(err)])
+        return
+    connection.send_result(msg["id"], await _async_result(hass, store, user_id))
+
+
+_VERIFY_ERRORS = {
+    "not_configured": "Email verification isn't set up. Ask an admin.",
+    "already_verified": "This email is already verified",
+    "too_soon": "Wait a minute before asking for another code",
+    "too_many_codes": "Too many codes sent. Try again in an hour.",
+    "send_failed": "The email couldn't be sent. Ask an admin to check the email settings.",
+    "no_code": "The code has expired. Ask for a new one.",
+    "wrong_code": "That code isn't right",
+    "too_many_attempts": "Too many wrong codes. Ask for a new one.",
+}

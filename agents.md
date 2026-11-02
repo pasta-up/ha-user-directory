@@ -23,13 +23,15 @@ no data migration (owner's decision).
   (`panel_custom`, `require_admin=False`) at `/user-directory`. JS is a plain web
   component in `frontend/`, no build step, styled with HA theme CSS variables rather
   than HA's internal elements (those rename often).
-- Single config entry. Options flow (admin-only by HA design) holds the publish policy
-  and SSO settings.
+- Single config entry. Options flow (admin-only by HA design) is a menu: Directory
+  (publish policy), Single sign-on, Email verification (SMTP). Each step saves its own
+  keys on top of the others.
 - Data, all `private=True`:
   - `.storage/user_directory.contacts`: `{user_id: {email?, phone?, github?}}` users/admins entered.
   - `.storage/user_directory.oidc`: same shape, last values fetched from SSO.
     Kept apart so toggling enforcement never loses user input.
   - `.storage/user_directory.settings`: `{user_id: {listed: bool, shared: [social fields]}}`.
+  - `.storage/user_directory.verified`: `{user_id: casefolded email they proved they own}`.
 - Cleanup: `user_removed` deletes that user everywhere (only while loaded);
   `async_remove_entry` deletes all files; turning SSO off deletes the SSO file and token.
 
@@ -55,11 +57,13 @@ All enforced server-side in `websocket.py`:
 | `user_directory/contact/get` `{user_id?}` | self; admin for others |
 | `user_directory/contact/update` `{user_id?, email?, phone?, github?, listed?, shared?}` | self; admin for others |
 | `user_directory/gravatar/set` `{user_id?, enabled}` | self; admin for others |
+| `user_directory/email/send_code` `{user_id?}` | self; admin for others |
+| `user_directory/email/confirm` `{user_id?, code}` | self; admin for others |
 | `user_directory/contact/list` | admin (full, unfiltered) |
 | `user_directory/directory/list` | any user (filtered by policy and sharing) |
 
-get/update return `{contact, sso, locked, gravatar: {enabled, available}, listed,
-listed_locked, shared}`. `listed`/`shared` omitted in update = unchanged.
+get/update/send_code/confirm return `{contact, sso, locked, gravatar: {enabled, available},
+email_verification: {available, verified, pending}, listed, listed_locked, shared}`. `listed`/`shared` omitted in update = unchanged.
 `update` replaces the whole manual contact: omitted fields are cleared. Values equal to
 the SSO value aren't stored, so later SSO changes still show. Errors: `unauthorized`,
 `not_found` (admin + unknown user), `invalid_format`, `field_locked`, `listed_locked`,
@@ -96,9 +100,11 @@ Replaces the retired `pasta-up/ha-gravatar-sync` (code in `gravatar.py` is porte
 
 - HA shows a user's avatar from their linked person, so we set the picture of the
   UI-managed person whose `user_id` matches. YAML persons can't be changed (`no_person`).
-- Email = the effective contact email (manual or SSO). Gravatar gets only its SHA-256 hash.
+- Email = the effective contact email (manual or SSO), and it must be verified (see
+  "Email verification"). Gravatar gets only its SHA-256 hash.
 - `user_directory/gravatar/set {user_id?, enabled}`: same owner-or-admin rule. Enabling
-  fetches immediately; errors `no_person`, `no_email`, `no_gravatar`, `cannot_connect`.
+  fetches immediately; errors `no_person`, `no_email`, `not_verified`, `no_gravatar`,
+  `cannot_connect`.
 - Avatar cached in `.storage/user_directory/avatars/<user_id>` and served by
   `AvatarView` at `/api/user_directory/avatar/<user_id>?v=<digest>` **without auth**:
   browsers load person pictures with plain `<img>`, like core's `/api/image/serve`.
@@ -106,13 +112,32 @@ Replaces the retired `pasta-up/ha-gravatar-sync` (code in `gravatar.py` is porte
 - `.storage/user_directory.gravatar`: `{user_id: {email, original_picture}}`.
   Off/removal restores `original_picture` only if the picture is still ours.
 - Refresh: every 6h (forced); after contact updates and SSO syncs, only users whose
-  email changed. Email gone -> Gravatar turned off. Unreachable/404 keeps the last avatar.
+  email changed, and once at setup. No verified email -> Gravatar turned off (so after
+  upgrading to 0.3.0, existing users lose it until they verify). Unreachable/404 keeps
+  the last avatar.
 - `hass.data["person"]` is a tuple up to 2026.11 and a dataclass later;
   `person_collection` handles both.
 
+## Email verification (`verify.py`, `mail.py`)
+
+- Optional. Admin sets SMTP (server, STARTTLS/SSL/none, port, login, from) under
+  Configure > Email verification; saving tests connect + login. Blank password keeps
+  the saved one; blank server removes all SMTP options. Password is plain text in options.
+- `send_code` emails a 6-digit code (`secrets`) to the *saved* email; `confirm` checks it
+  (`hmac.compare_digest`). Codes are in memory only: 15 min, 5 guesses, 1 min before
+  resending to the same address, 5 codes per user per hour.
+- Verified = stored casefolded address matches the current email, so changing the email
+  unverifies it and changing back re-verifies. SSO-provided emails (value equals the SSO
+  value) count as verified without a code: the IdP vouches for them.
+- Errors: `not_configured`, `no_email`, `already_verified`, `too_soon`, `too_many_codes`,
+  `send_failed` (SMTP cause logged), `no_code` (none, expired, or email changed),
+  `wrong_code`, `too_many_attempts`.
+- Directory entries carry `email_verified`; the panel shows a check mark.
+- Tests patch `mail.smtplib.SMTP` (conftest `smtp`) and read the code from the sent message.
+
 ## Validation (`store.py`)
 
-- email: `x@y.z`, no spaces, <= 254 chars. Not verified.
+- email: `x@y.z`, no spaces, <= 254 chars. Ownership is checked separately (above).
 - phone: digits, spaces, `()-.`, optional leading `+`; 7-15 digits.
 - github: GitHub username rules; leading `@` stripped.
 

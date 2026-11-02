@@ -31,6 +31,32 @@ SUPPORTED_PROVIDERS: Final = {PROVIDER_AUTH_OIDC: "OpenID Connect/SSO (hass-oidc
 
 OIDC_SYNC_INTERVAL: Final = timedelta(hours=1)
 
+CONF_SMTP_HOST: Final = "smtp_host"
+CONF_SMTP_PORT: Final = "smtp_port"
+CONF_SMTP_SECURITY: Final = "smtp_security"
+CONF_SMTP_USERNAME: Final = "smtp_username"
+CONF_SMTP_PASSWORD: Final = "smtp_password"
+CONF_SMTP_SENDER: Final = "smtp_sender"
+SMTP_OPTIONS: Final = (
+    CONF_SMTP_HOST,
+    CONF_SMTP_PORT,
+    CONF_SMTP_SECURITY,
+    CONF_SMTP_USERNAME,
+    CONF_SMTP_PASSWORD,
+    CONF_SMTP_SENDER,
+)
+SECURITY_STARTTLS: Final = "starttls"
+SECURITY_SSL: Final = "ssl"
+SECURITY_NONE: Final = "none"
+# Default port for each encryption mode.
+SMTP_PORTS: Final = {SECURITY_STARTTLS: 587, SECURITY_SSL: 465, SECURITY_NONE: 25}
+
+# Email verification codes; see agents.md "Email verification".
+CODE_TTL: Final = timedelta(minutes=15)
+CODE_RESEND_AFTER: Final = timedelta(minutes=1)
+CODE_MAX_ATTEMPTS: Final = 5
+CODE_MAX_PER_HOUR: Final = 5
+
 GRAVATAR_URL: Final = "https://gravatar.com/avatar/{hash}"
 GRAVATAR_SIZE: Final = 512
 GRAVATAR_REFRESH_INTERVAL: Final = timedelta(hours=6)
@@ -40,6 +66,7 @@ STORAGE_KEY: Final = f"{DOMAIN}.contacts"
 STORAGE_KEY_OIDC: Final = f"{DOMAIN}.oidc"
 STORAGE_KEY_GRAVATAR: Final = f"{DOMAIN}.gravatar"
 STORAGE_KEY_SETTINGS: Final = f"{DOMAIN}.settings"
+STORAGE_KEY_VERIFIED: Final = f"{DOMAIN}.verified"
 STORAGE_VERSION: Final = 1
 
 PANEL_URL_PATH: Final = "user-directory"

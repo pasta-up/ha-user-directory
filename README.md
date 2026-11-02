@@ -29,14 +29,23 @@ Click **My info** to add your own details:
 - Social links like GitHub only show if you tick **Show in the directory** next to them.
 - Only you and admins can change your info. Admins can pick any user at the top.
 
-Admins choose who's listed under **ha-user-directory** > **Configure**: users choose
-for themselves (default), SSO users always, or everyone.
+Admins choose who's listed under **ha-user-directory** > **Configure** > **Directory**:
+users choose for themselves (default), SSO users always, or everyone.
+
+## Email verification (optional)
+
+An admin sets up an SMTP server under **ha-user-directory** > **Configure** >
+**Email verification**. Users can then click **Email me a code** under their email in
+**My info** and enter the code to verify it. Verified emails get a ✓ in the directory.
+Emails from SSO count as verified.
 
 ## Gravatar
 
 In **My info**, tick **Use my Gravatar as my profile picture**. Your picture becomes the Gravatar for
 your email, and refreshes every 6 hours and whenever the email changes. Untick it to get
 your old picture back.
+
+Your email must be verified first. Changing it to an unverified email turns Gravatar off.
 
 Your user needs a linked person created in the UI (**Settings** > **People**).
 
@@ -46,7 +55,7 @@ If you sign in with [OpenID Connect/SSO](https://github.com/christiaangoossens/h
 and Authentik, emails can come from Authentik.
 
 1. In Authentik, create a service account that can only view users, and an API token for it.
-2. In Home Assistant, open **ha-user-directory** > **Configure**.
+2. In Home Assistant, open **ha-user-directory** > **Configure** > **Single sign-on**.
 3. Turn on **Use SSO contact info** and paste the token.
 4. Optionally turn on **Enforce SSO contact info** so SSO emails can only be changed in Authentik.
 

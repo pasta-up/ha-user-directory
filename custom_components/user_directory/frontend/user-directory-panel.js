@@ -5,6 +5,17 @@ const FIELDS = [
   { key: "github", label: "GitHub username", type: "text", autocomplete: "username", social: true },
 ];
 
+// Shown under the email field.
+const VERIFY = `
+  <div id="verify" hidden>
+    <div class="note" id="verify-note"></div>
+    <div class="verify-row" id="verify-row">
+      <button type="button" id="send-code">Email me a code</button>
+      <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Code" aria-label="Code" hidden>
+      <button type="button" id="confirm-code" hidden>Verify</button>
+    </div>
+  </div>`;
+
 const TEMPLATE = `
   <style>
     :host { display: block; min-height: 100vh; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
@@ -24,6 +35,10 @@ const TEMPLATE = `
     button:disabled { opacity: 0.5; cursor: default; }
     .status { font-size: 14px; }
     .error { color: var(--error-color, #db4437); }
+    .ok { color: var(--success-color, #43a047); }
+    .verify-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .verify-row button { padding: 8px 12px; }
+    .verify-row input { width: 8em; margin: 0; }
     .hint { font-size: 12px; color: var(--secondary-text-color); margin-top: 16px; }
     ul { list-style: none; margin: 16px 0 0; padding: 0; }
     li { display: flex; align-items: center; gap: 16px; padding: 12px 8px; border-top: 1px solid var(--divider-color); cursor: pointer; }
@@ -53,7 +68,7 @@ const TEMPLATE = `
     </div>
     <label class="check top"><input id="listed" type="checkbox"> List me in the User-Directory</label>
     <div class="note" id="listed-note"></div>
-    ${FIELDS.map((f) => `<label for="${f.key}">${f.label}</label><input id="${f.key}" type="${f.type}" autocomplete="${f.autocomplete}"><div class="note" id="${f.key}-note" hidden></div>${f.social ? `<label class="check"><input id="share-${f.key}" type="checkbox"> Show in the directory</label>` : ""}`).join("")}
+    ${FIELDS.map((f) => `<label for="${f.key}">${f.label}</label><input id="${f.key}" type="${f.type}" autocomplete="${f.autocomplete}"><div class="note" id="${f.key}-note" hidden></div>${f.key === "email" ? VERIFY : ""}${f.social ? `<label class="check"><input id="share-${f.key}" type="checkbox"> Show in the directory</label>` : ""}`).join("")}
     <label class="check top"><input id="gravatar" type="checkbox"> Use my Gravatar as my profile picture</label>
     <div class="note" id="gravatar-note"></div>
     <div class="hint">Everything is optional. Only you and admins can change it.</div>
@@ -86,6 +101,9 @@ class UserDirectoryPanel extends HTMLElement {
     $("user").addEventListener("change", () => this._load());
     $("gravatar").addEventListener("change", (ev) => this._setGravatar(ev.target));
     $("search").addEventListener("input", () => this._render());
+    $("send-code").addEventListener("click", () => this._verify({ type: "user_directory/email/send_code" }, "Code sent. Check your email."));
+    $("confirm-code").addEventListener("click", () => this._verify({ type: "user_directory/email/confirm", code: $("code").value }, "Email verified"));
+    $("email").addEventListener("input", () => this._showVerify());
     $("to-editor").addEventListener("click", () => this._view("editor"));
     $("to-directory").addEventListener("click", () => this._view("directory"));
   }
@@ -182,7 +200,13 @@ class UserDirectoryPanel extends HTMLElement {
       if (href.startsWith("https:")) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
       details.append(a);
     };
-    if (person.email) link(person.email, `mailto:${person.email}`);
+    if (person.email) {
+      link(person.email, `mailto:${person.email}`);
+      if (person.email_verified) {
+        details.lastChild.title = "Verified email";
+        details.lastChild.append(" ✓");
+      }
+    }
     if (person.phone) link(person.phone, `tel:${person.phone.replace(/[^\d+]/g, "")}`);
     if (person.github) link(`GitHub: ${person.github}`, `https://github.com/${encodeURIComponent(person.github)}`);
     who.append(name, details);
@@ -228,6 +252,43 @@ class UserDirectoryPanel extends HTMLElement {
     }
   }
 
+  async _verify(msg, done) {
+    const buttons = [this._$("send-code"), this._$("confirm-code")];
+    buttons.forEach((b) => { b.disabled = true; });
+    this._status("");
+    try {
+      this._show(await this._hass.callWS({ ...msg, user_id: this._userId }));
+      this._$("code").value = "";
+      this._status(done);
+    } catch (err) {
+      this._status(err.message, true);
+    } finally {
+      buttons.forEach((b) => { b.disabled = false; });
+    }
+  }
+
+  // Verification is about the saved email, so it pauses while the field is edited.
+  _showVerify() {
+    const v = this._verification;
+    const saved = this._savedEmail;
+    const block = this._$("verify");
+    block.hidden = !saved;
+    if (!saved) return;
+    const note = this._$("verify-note");
+    const editing = this._$("email").value.trim() !== saved;
+    const canVerify = !v.verified && v.available && !editing;
+    note.classList.toggle("ok", v.verified && !editing);
+    note.textContent = editing ? "Save to verify the new email."
+      : v.verified ? "Verified ✓"
+      : !v.available ? "Not verified. Email verification isn't set up; ask an admin."
+      : v.pending ? "Not verified. Enter the code we emailed you."
+      : "Not verified.";
+    this._$("verify-row").hidden = !canVerify;
+    this._$("send-code").textContent = v.pending ? "Send a new code" : "Email me a code";
+    this._$("code").hidden = !v.pending;
+    this._$("confirm-code").hidden = !v.pending;
+  }
+
   async _setGravatar(box) {
     box.disabled = true;
     this._status("");
@@ -258,12 +319,17 @@ class UserDirectoryPanel extends HTMLElement {
     this._$("listed-note").textContent = result.listed_locked
       ? "An admin has made the directory required for you. Your name, picture, email and phone are shown to all users."
       : "Shows your name, picture, email and phone to all users of this Home Assistant.";
+    this._savedEmail = result.contact.email || "";
+    this._verification = result.email_verification;
+    this._showVerify();
+    const verified = result.email_verification.verified;
     const box = this._$("gravatar");
     box.checked = result.gravatar.enabled;
-    box.disabled = !result.gravatar.available && !result.gravatar.enabled;
-    this._$("gravatar-note").textContent = result.gravatar.available
-      ? "Uses the email above. Turning it off puts your old picture back."
-      : "Needs a person linked to this user. Ask an admin to link one in Settings > People.";
+    box.disabled = !result.gravatar.enabled && (!result.gravatar.available || !verified);
+    this._$("gravatar-note").textContent = !result.gravatar.available
+      ? "Needs a person linked to this user. Ask an admin to link one in Settings > People."
+      : !verified ? "Needs a verified email. Verify the email above first."
+      : "Uses the email above. Turning it off puts your old picture back.";
   }
 
   _status(text, isError = false) {

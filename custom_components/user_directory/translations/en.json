@@ -14,19 +14,51 @@
     "step": {
       "init": {
         "title": "ha-user-directory",
-        "description": "Who appears in the User-Directory, and optional single sign-on. Supported SSO integration: {status}. API token saved: {token_saved}.",
+        "menu_options": {
+          "directory": "Directory",
+          "sso": "Single sign-on",
+          "email": "Email verification"
+        }
+      },
+      "directory": {
+        "title": "Directory",
         "data": {
-          "publish_policy": "Who is listed in the directory",
+          "publish_policy": "Who is listed in the directory"
+        },
+        "data_description": {
+          "publish_policy": "Listed users show their name, picture, email and phone to every user. Social links only show if each user turns them on."
+        }
+      },
+      "sso": {
+        "title": "Single sign-on",
+        "description": "Supported SSO integration: {status}. API token saved: {token_saved}.",
+        "data": {
           "oidc_enabled": "Use SSO contact info",
           "oidc_provider": "SSO integration",
           "authentik_token": "Authentik API token",
           "oidc_enforce": "Enforce SSO contact info"
         },
         "data_description": {
-          "publish_policy": "Listed users show their name, picture, email and phone to every user. Social links only show if each user turns them on.",
           "oidc_enabled": "Only available when a supported SSO integration is set up and working. Turning this off forgets the token and the SSO values.",
           "authentik_token": "Token for an Authentik service account that can only view users. Leave blank to keep the saved token.",
           "oidc_enforce": "When on, fields filled from SSO can't be changed in Home Assistant, only in Authentik. When off, SSO only fills fields the user left empty."
+        }
+      },
+      "email": {
+        "title": "Email verification",
+        "description": "Lets users verify their email by entering a code sent to it. A verified email is needed for Gravatar. Leave the server blank to turn this off. Password saved: {password_saved}.",
+        "data": {
+          "smtp_host": "SMTP server",
+          "smtp_security": "Encryption",
+          "smtp_port": "Port",
+          "smtp_username": "Username",
+          "smtp_password": "Password",
+          "smtp_sender": "From address"
+        },
+        "data_description": {
+          "smtp_port": "Leave blank for the usual port: 587 for STARTTLS, 465 for SSL/TLS, 25 for none.",
+          "smtp_username": "Leave blank if the server doesn't need a login.",
+          "smtp_password": "Leave blank to keep the saved password."
         }
       }
     },
@@ -35,7 +67,10 @@
       "token_required": "Enter an API token.",
       "invalid_token": "Authentik rejected the API token, or it can't view users.",
       "cannot_connect": "Can't reach the SSO identity provider.",
-      "unsupported_idp": "The SSO identity provider isn't Authentik. Only Authentik is supported."
+      "unsupported_idp": "The SSO identity provider isn't Authentik. Only Authentik is supported.",
+      "invalid_sender": "Enter a valid email address.",
+      "smtp_cannot_connect": "Can't connect to the SMTP server. Check the server, port and encryption.",
+      "smtp_auth_failed": "The SMTP server rejected the username or password."
     }
   },
   "selector": {
@@ -44,6 +79,13 @@
         "choice": "Users choose for themselves",
         "oidc": "SSO users always; others choose",
         "all": "All users"
+      }
+    },
+    "smtp_security": {
+      "options": {
+        "starttls": "STARTTLS",
+        "ssl": "SSL/TLS",
+        "none": "None (not recommended)"
       }
     }
   }

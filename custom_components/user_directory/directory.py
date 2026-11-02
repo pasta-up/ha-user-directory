@@ -16,6 +16,7 @@ from .const import (
     SOCIAL_FIELDS,
 )
 from .store import ContactStore
+from .verify import EmailVerifier, verified_email
 
 
 def is_oidc_user(user: User) -> bool:
@@ -36,7 +37,7 @@ def is_listed(store: ContactStore, user: User) -> bool:
 
 
 async def async_directory(
-    hass: HomeAssistant, store: ContactStore
+    hass: HomeAssistant, store: ContactStore, verifier: EmailVerifier
 ) -> list[dict[str, Any]]:
     """Return listed users with only the fields they publish, sorted by name."""
     pictures = {
@@ -57,6 +58,10 @@ async def async_directory(
         for field in (CONF_EMAIL, CONF_PHONE):
             if field in contact:
                 entry[field] = contact[field]
+        if CONF_EMAIL in entry:
+            entry["email_verified"] = (
+                verified_email(store, verifier, user.id) is not None
+            )
         for field in SOCIAL_FIELDS:
             if field in shared and field in contact:
                 entry[field] = contact[field]

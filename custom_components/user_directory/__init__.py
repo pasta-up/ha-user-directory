@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from datetime import datetime
 import logging
 from pathlib import Path
@@ -19,7 +20,6 @@ from homeassistant.loader import async_get_integration
 
 from .const import (
     CONF_AUTHENTIK_TOKEN,
-    CONF_EMAIL,
     CONF_OIDC_ENABLED,
     CONF_OIDC_ENFORCE,
     CONF_PUBLISH_POLICY,
@@ -34,8 +34,10 @@ from .const import (
     STATIC_URL,
 )
 from .gravatar import DATA_GRAVATAR, AvatarView, GravatarManager
+from .mail import Mailer, SmtpConfig
 from .oidc import AuthentikSync, OidcError
 from .store import ContactStore
+from .verify import DATA_VERIFIER, EmailVerifier, verified_email_getter
 from .websocket import DATA_STORE, async_register_commands
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,22 +65,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await store.async_load()
     gravatar = GravatarManager(hass)
     await gravatar.async_load()
+    smtp = SmtpConfig.from_options(entry.options)
+    verifier = EmailVerifier(hass, smtp and Mailer(hass, smtp))
+    await verifier.async_load()
     hass.data[DATA_STORE] = store
     hass.data[DATA_GRAVATAR] = gravatar
+    hass.data[DATA_VERIFIER] = verifier
     async_register_commands(hass)
+    email_for = verified_email_getter(store, verifier)
 
     async def _async_user_removed(event: Event) -> None:
         await store.async_remove_user(event.data["user_id"])
         await gravatar.async_remove_user(event.data["user_id"])
+        await verifier.async_remove_user(event.data["user_id"])
 
     entry.async_on_unload(
         hass.bus.async_listen(EVENT_USER_REMOVED, _async_user_removed)
     )
 
     async def _async_refresh_gravatar(_: datetime) -> None:
-        await gravatar.async_refresh(
-            lambda user_id: store.get(user_id).get(CONF_EMAIL), force=True
-        )
+        await gravatar.async_refresh(email_for, force=True)
 
     entry.async_on_unload(
         async_track_time_interval(
@@ -87,9 +93,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     if oidc_enabled:
-        _async_start_oidc_sync(hass, entry, store, gravatar)
+        _async_start_oidc_sync(hass, entry, store, gravatar, email_for)
     else:
         await store.async_clear_oidc()
+    # Turns off Gravatar for anyone whose email isn't (or is no longer) verified.
+    entry.async_create_background_task(
+        hass, gravatar.async_refresh(email_for), f"{DOMAIN} Gravatar check"
+    )
 
     version = (await async_get_integration(hass, DOMAIN)).version
     await panel_custom.async_register_panel(
@@ -109,6 +119,7 @@ def _async_start_oidc_sync(
     entry: ConfigEntry,
     store: ContactStore,
     gravatar: GravatarManager,
+    email_for: Callable[[str], str | None],
 ) -> None:
     """Sync now, hourly, and when a user is added (first SSO login)."""
     sync = AuthentikSync(hass, entry.options[CONF_AUTHENTIK_TOKEN])
@@ -123,7 +134,7 @@ def _async_start_oidc_sync(
                 _LOGGER.warning("SSO contact sync failed: %s", err)
                 return
         # An SSO email change should change the Gravatar too.
-        await gravatar.async_refresh(lambda user_id: store.get(user_id).get(CONF_EMAIL))
+        await gravatar.async_refresh(email_for)
 
     entry.async_on_unload(
         async_track_time_interval(hass, _async_sync, OIDC_SYNC_INTERVAL)
@@ -137,12 +148,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     frontend.async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
     hass.data.pop(DATA_STORE, None)
     hass.data.pop(DATA_GRAVATAR, None)
+    hass.data.pop(DATA_VERIFIER, None)
     return True
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Delete everything and put back pictures replaced by Gravatar."""
     await ContactStore(hass).async_remove()
+    await EmailVerifier(hass, None).async_remove()
     gravatar = GravatarManager(hass)
     await gravatar.async_load()
     await gravatar.async_remove_all()

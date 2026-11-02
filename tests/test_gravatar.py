@@ -55,6 +55,20 @@ async def _set_email(client, email: str | None) -> dict[str, Any]:
     )
 
 
+@pytest.fixture
+async def client(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    hass_ws_client: WebSocketGenerator,
+    verify_email,
+):
+    """An admin client whose email is set and verified."""
+    client = await hass_ws_client(hass)
+    await _set_email(client, EMAIL)
+    assert (await verify_email(client))["success"]
+    return client
+
+
 async def _set_gravatar(client, enabled: bool, **extra: Any) -> dict[str, Any]:
     return await _send(
         client,
@@ -78,12 +92,16 @@ async def test_needs_email_and_gravatar(
     entry: MockConfigEntry,
     hass_ws_client: WebSocketGenerator,
     aioclient_mock: AiohttpClientMocker,
+    verify_email,
 ) -> None:
-    """Turning it on fails clearly without an email or a Gravatar."""
+    """Turning it on fails clearly without a verified email or a Gravatar."""
     client = await hass_ws_client(hass)
     assert (await _set_gravatar(client, True))["error"]["code"] == "no_email"
 
     await _set_email(client, EMAIL)
+    assert (await _set_gravatar(client, True))["error"]["code"] == "not_verified"
+
+    assert (await verify_email(client))["success"]
     aioclient_mock.get(AVATAR, status=HTTPStatus.NOT_FOUND)
     assert (await _set_gravatar(client, True))["error"]["code"] == "no_gravatar"
     assert _picture(hass, person) == ORIGINAL
@@ -93,14 +111,12 @@ async def test_enable_and_disable(
     hass: HomeAssistant,
     person: dict[str, Any],
     entry: MockConfigEntry,
-    hass_ws_client: WebSocketGenerator,
+    client,
     hass_client_no_auth: ClientSessionGenerator,
     aioclient_mock: AiohttpClientMocker,
     hass_admin_user: User,
 ) -> None:
     """The Gravatar becomes the picture, is served locally, and off restores it."""
-    client = await hass_ws_client(hass)
-    await _set_email(client, EMAIL)
     aioclient_mock.get(AVATAR, content=PNG)
 
     msg = await _set_gravatar(client, True)
@@ -126,22 +142,27 @@ async def test_email_changes(
     hass: HomeAssistant,
     person: dict[str, Any],
     entry: MockConfigEntry,
-    hass_ws_client: WebSocketGenerator,
+    client,
     aioclient_mock: AiohttpClientMocker,
+    verify_email,
 ) -> None:
-    """A new email fetches a new avatar; removing the email turns Gravatar off."""
-    client = await hass_ws_client(hass)
-    await _set_email(client, EMAIL)
+    """A new email fetches a new avatar once verified; no verified email turns it off."""
     aioclient_mock.get(AVATAR, content=PNG)
     await _set_gravatar(client, True)
     first = _picture(hass, person)
 
+    # An unverified new email turns Gravatar off.
     other = "grace@example.com"
+    msg = await _set_email(client, other)
+    assert msg["result"]["gravatar"]["enabled"] is False
+    assert _picture(hass, person) == ORIGINAL
+
     aioclient_mock.get(
         f"https://gravatar.com/avatar/{gravatar_hash(other)}", content=JPEG
     )
-    await _set_email(client, other)
-    assert _picture(hass, person) != first
+    assert (await verify_email(client))["success"]
+    await _set_gravatar(client, True)
+    assert _picture(hass, person) not in (first, ORIGINAL)
 
     msg = await _set_email(client, None)
     assert msg["result"]["gravatar"]["enabled"] is False
@@ -152,12 +173,10 @@ async def test_hand_set_picture_kept(
     hass: HomeAssistant,
     person: dict[str, Any],
     entry: MockConfigEntry,
-    hass_ws_client: WebSocketGenerator,
+    client,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
     """A picture changed by hand after enabling isn't replaced when turning off."""
-    client = await hass_ws_client(hass)
-    await _set_email(client, EMAIL)
     aioclient_mock.get(AVATAR, content=PNG)
     await _set_gravatar(client, True)
 
@@ -186,12 +205,10 @@ async def test_remove_entry_restores(
     hass: HomeAssistant,
     person: dict[str, Any],
     entry: MockConfigEntry,
-    hass_ws_client: WebSocketGenerator,
+    client,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
     """Removing the integration puts the original picture back."""
-    client = await hass_ws_client(hass)
-    await _set_email(client, EMAIL)
     aioclient_mock.get(AVATAR, content=PNG)
     await _set_gravatar(client, True)
 

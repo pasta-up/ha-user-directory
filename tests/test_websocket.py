@@ -19,6 +19,7 @@ async def test_own_contact(
         "sso": [],
         "locked": [],
         "gravatar": {"enabled": False, "available": False},
+        "email_verification": {"available": True, "verified": False, "pending": False},
         "listed": False,
         "listed_locked": False,
         "shared": [],

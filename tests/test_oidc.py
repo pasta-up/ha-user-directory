@@ -96,10 +96,17 @@ async def _get(client, user: User) -> dict:
     return (await client.receive_json())["result"]
 
 
+async def _sso_step(hass: HomeAssistant, entry: MockConfigEntry) -> dict:
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "sso"}
+    )
+
+
 async def test_options_need_active_provider(hass: HomeAssistant) -> None:
     """SSO can't be turned on without a supported SSO integration."""
     entry = await _setup(hass, {})
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _sso_step(hass, entry)
     assert result["description_placeholders"]["status"] == "not detected"
 
     result = await hass.config_entries.options.async_configure(
@@ -114,7 +121,7 @@ async def test_options_validate_and_save(
     """The issuer comes from hass-oidc-auth, and the token is checked before saving."""
     entry = await _setup(hass, {})
     aioclient_mock.get(DISCOVERY, json={"issuer": "https://login.example.com/"})
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _sso_step(hass, entry)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], ENABLED
     )
@@ -136,16 +143,15 @@ async def test_options_validate_and_save(
         result["flow_id"], ENABLED
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.options == {**ENABLED, "publish_policy": "choice"}
+    assert entry.options == ENABLED
     await hass.async_block_till_done()
 
     # Turning SSO off forgets the token.
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _sso_step(hass, entry)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_OIDC_ENABLED: False}
     )
     assert entry.options == {
-        "publish_policy": "choice",
         CONF_OIDC_ENABLED: False,
         CONF_OIDC_ENFORCE: False,
     }
@@ -165,6 +171,8 @@ async def test_sso_fills_empty_fields(
     assert result["contact"] == {"email": "ada@sso.example"}
     assert result["sso"] == ["email"]
     assert result["locked"] == []
+    # The identity provider vouches for SSO emails.
+    assert result["email_verification"]["verified"] is True
 
     await client.send_json_auto_id(
         {
@@ -173,9 +181,9 @@ async def test_sso_fills_empty_fields(
             "email": "ada@home.example",
         }
     )
-    assert (await client.receive_json())["result"]["contact"] == {
-        "email": "ada@home.example"
-    }
+    result = (await client.receive_json())["result"]
+    assert result["contact"] == {"email": "ada@home.example"}
+    assert result["email_verification"]["verified"] is False
 
     # Clearing the override shows the SSO value again.
     await client.send_json_auto_id(
@@ -233,6 +241,7 @@ async def test_unmatched_users_untouched(
         "sso": [],
         "locked": [],
         "gravatar": {"enabled": False, "available": False},
+        "email_verification": {"available": False, "verified": False, "pending": False},
         "listed": False,
         "listed_locked": False,
         "shared": [],
