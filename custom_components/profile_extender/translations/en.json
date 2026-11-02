@@ -3,11 +3,37 @@
     "step": {
       "user": {
         "title": "Profile Extender",
-        "description": "Adds a Contact info page to the sidebar where each user can set their email, phone and GitHub username."
+        "description": "Adds a User Extended Info page to the sidebar where each user can set their email, phone and GitHub username."
       }
     },
     "abort": {
       "single_instance_allowed": "Profile Extender is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Single sign-on",
+        "description": "Fill in contact info from your SSO identity provider. Supported SSO integration: {status}. API token saved: {token_saved}.",
+        "data": {
+          "oidc_enabled": "Use SSO contact info",
+          "oidc_provider": "SSO integration",
+          "authentik_token": "Authentik API token",
+          "oidc_enforce": "Enforce SSO contact info"
+        },
+        "data_description": {
+          "oidc_enabled": "Only available when a supported SSO integration is set up and working. Turning this off forgets the token and the SSO values.",
+          "authentik_token": "Token for an Authentik service account that can only view users. Leave blank to keep the saved token.",
+          "oidc_enforce": "When on, fields filled from SSO can't be changed in Home Assistant, only in Authentik. When off, SSO only fills fields the user left empty."
+        }
+      }
+    },
+    "error": {
+      "provider_not_active": "No supported SSO integration is set up. Install and configure OpenID Connect/SSO (hass-oidc-auth) first.",
+      "token_required": "Enter an API token.",
+      "invalid_token": "Authentik rejected the API token, or it can't view users.",
+      "cannot_connect": "Can't reach the SSO identity provider.",
+      "unsupported_idp": "The SSO identity provider isn't Authentik. Only Authentik is supported."
     }
   }
 }

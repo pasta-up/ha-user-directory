@@ -4,7 +4,13 @@
   "categories": ["productivity_information"],
   "codeowners": ["@pasta-up"],
   "config_flow": true,
-  "dependencies": ["frontend", "http", "panel_custom", "websocket_api"],
+  "dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "person",
+    "websocket_api"
+  ],
   "documentation": "https://github.com/pasta-up/ha-profile-extender",
   "integration_type": "service",
   "iot_class": "calculated",

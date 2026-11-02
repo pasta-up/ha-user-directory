@@ -14,7 +14,12 @@ async def test_own_contact(
     client = await hass_ws_client(hass)
 
     await client.send_json_auto_id({"type": "profile_extender/contact/get"})
-    assert (await client.receive_json())["result"] == {}
+    assert (await client.receive_json())["result"] == {
+        "contact": {},
+        "sso": [],
+        "locked": [],
+        "gravatar": {"enabled": False, "available": False},
+    }
 
     await client.send_json_auto_id(
         {
@@ -23,7 +28,7 @@ async def test_own_contact(
             "github": "@ada",
         }
     )
-    assert (await client.receive_json())["result"] == {
+    assert (await client.receive_json())["result"]["contact"] == {
         "email": "ada@example.com",
         "github": "ada",
     }
@@ -36,12 +41,12 @@ async def test_own_contact(
 
     # A failed update leaves the saved info alone.
     await client.send_json_auto_id({"type": "profile_extender/contact/get"})
-    assert (await client.receive_json())["result"]["github"] == "ada"
+    assert (await client.receive_json())["result"]["contact"]["github"] == "ada"
 
     await client.send_json_auto_id(
         {"type": "profile_extender/contact/update", "email": "", "github": None}
     )
-    assert (await client.receive_json())["result"] == {}
+    assert (await client.receive_json())["result"]["contact"] == {}
 
 
 async def test_non_admin_limited_to_self(
@@ -98,7 +103,9 @@ async def test_admin_manages_others(
     await client.send_json_auto_id(
         {"type": "profile_extender/contact/get", "user_id": hass_read_only_user.id}
     )
-    assert (await client.receive_json())["result"] == {"email": "bob@example.com"}
+    assert (await client.receive_json())["result"]["contact"] == {
+        "email": "bob@example.com"
+    }
 
     await client.send_json_auto_id({"type": "profile_extender/contact/list"})
     assert (await client.receive_json())["result"] == {

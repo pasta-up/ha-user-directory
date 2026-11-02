@@ -11,7 +11,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import Unauthorized
 from homeassistant.util.hass_dict import HassKey
 
-from .const import CONTACT_FIELDS, DOMAIN
+from .const import CONF_EMAIL, CONTACT_FIELDS, DOMAIN
+from .gravatar import DATA_GRAVATAR, GravatarError
 from .store import ContactStore, InvalidContact, clean_contact
 
 DATA_STORE: HassKey[ContactStore] = HassKey(DOMAIN)
@@ -25,6 +26,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get)
     websocket_api.async_register_command(hass, ws_update)
     websocket_api.async_register_command(hass, ws_list)
+    websocket_api.async_register_command(hass, ws_gravatar_set)
 
 
 async def _async_target(
@@ -45,6 +47,19 @@ async def _async_target(
     return store, user_id
 
 
+def _result(hass: HomeAssistant, store: ContactStore, user_id: str) -> dict[str, Any]:
+    gravatar = hass.data[DATA_GRAVATAR]
+    return {
+        "contact": store.get(user_id),
+        "sso": store.sso_fields(user_id),
+        "locked": store.locked_fields(user_id),
+        "gravatar": {
+            "enabled": gravatar.enabled(user_id),
+            "available": gravatar.available(user_id),
+        },
+    }
+
+
 @websocket_api.websocket_command(
     {
         probatio.Required("type"): f"{DOMAIN}/contact/get",
@@ -57,8 +72,7 @@ async def ws_get(
 ) -> None:
     """Return a user's contact info; defaults to the current user."""
     if target := await _async_target(hass, connection, msg):
-        store, user_id = target
-        connection.send_result(msg["id"], store.get(user_id))
+        connection.send_result(msg["id"], _result(hass, *target))
 
 
 @websocket_api.websocket_command(
@@ -84,8 +98,23 @@ async def ws_update(
     except InvalidContact as err:
         connection.send_error(msg["id"], "invalid_format", str(err))
         return
+
+    oidc = store.oidc(user_id)
+    for field in store.locked_fields(user_id):
+        if field in contact and contact[field] != oidc[field]:
+            connection.send_error(
+                msg["id"], "field_locked", f"{field} is managed by SSO"
+            )
+            return
+    # Values matching SSO aren't stored, so later SSO changes still show through.
+    contact = {f: v for f, v in contact.items() if oidc.get(f) != v}
+
     await store.async_set(user_id, contact)
-    connection.send_result(msg["id"], contact)
+    # A new email means a new Gravatar; no email turns Gravatar off.
+    await hass.data[DATA_GRAVATAR].async_refresh(
+        lambda uid: store.get(uid).get(CONF_EMAIL)
+    )
+    connection.send_result(msg["id"], _result(hass, store, user_id))
 
 
 @websocket_api.websocket_command({probatio.Required("type"): f"{DOMAIN}/contact/list"})
@@ -99,3 +128,38 @@ def ws_list(
         connection.send_error(msg["id"], "not_loaded", "Profile Extender is not loaded")
         return
     connection.send_result(msg["id"], store.all())
+
+
+@websocket_api.websocket_command(
+    {
+        probatio.Required("type"): f"{DOMAIN}/gravatar/set",
+        probatio.Optional(CONF_USER_ID): str,
+        probatio.Required("enabled"): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_gravatar_set(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Turn a user's Gravatar profile picture on or off."""
+    if not (target := await _async_target(hass, connection, msg)):
+        return
+    store, user_id = target
+    gravatar = hass.data[DATA_GRAVATAR]
+    try:
+        if msg["enabled"]:
+            await gravatar.async_enable(user_id, store.get(user_id).get(CONF_EMAIL))
+        else:
+            await gravatar.async_disable(user_id)
+    except GravatarError as err:
+        connection.send_error(msg["id"], str(err), _GRAVATAR_ERRORS[str(err)])
+        return
+    connection.send_result(msg["id"], _result(hass, store, user_id))
+
+
+_GRAVATAR_ERRORS = {
+    "no_person": "No person is linked to this user, or it's defined in YAML",
+    "no_email": "Add an email address first",
+    "no_gravatar": "This email has no Gravatar",
+    "cannot_connect": "Can't reach Gravatar",
+}
