@@ -1,4 +1,4 @@
-"""Let Home Assistant users keep their own contact info and Gravatar."""
+"""A directory of Home Assistant users, with contact info and Gravatar pictures."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from .const import (
     CONF_EMAIL,
     CONF_OIDC_ENABLED,
     CONF_OIDC_ENFORCE,
+    CONF_PUBLISH_POLICY,
     DOMAIN,
     GRAVATAR_REFRESH_INTERVAL,
     OIDC_SYNC_INTERVAL,
@@ -29,6 +30,7 @@ from .const import (
     PANEL_ICON,
     PANEL_TITLE,
     PANEL_URL_PATH,
+    POLICY_CHOICE,
     STATIC_URL,
 )
 from .gravatar import DATA_GRAVATAR, AvatarView, GravatarManager
@@ -54,7 +56,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Load data, start background syncs, and add the sidebar panel."""
     oidc_enabled = entry.options.get(CONF_OIDC_ENABLED, False)
     store = ContactStore(
-        hass, enforce_oidc=oidc_enabled and entry.options.get(CONF_OIDC_ENFORCE, False)
+        hass,
+        enforce_oidc=oidc_enabled and entry.options.get(CONF_OIDC_ENFORCE, False),
+        policy=entry.options.get(CONF_PUBLISH_POLICY, POLICY_CHOICE),
     )
     await store.async_load()
     gravatar = GravatarManager(hass)

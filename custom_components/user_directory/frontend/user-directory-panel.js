@@ -1,19 +1,22 @@
-// Sidebar panel: edit your own contact info; admins can pick any user.
+// Sidebar panel: the user directory, plus an editor for your own info (admins: anyone's).
 const FIELDS = [
   { key: "email", label: "Email", type: "email", autocomplete: "email" },
   { key: "phone", label: "Phone", type: "tel", autocomplete: "tel" },
-  { key: "github", label: "GitHub username", type: "text", autocomplete: "username" },
+  { key: "github", label: "GitHub username", type: "text", autocomplete: "username", social: true },
 ];
 
 const TEMPLATE = `
   <style>
     :host { display: block; min-height: 100vh; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
-    header { display: flex; align-items: center; height: var(--header-height, 56px); padding: 0 12px; background: var(--app-header-background-color, var(--primary-color)); color: var(--app-header-text-color, #fff); font-size: 20px; }
-    .card { max-width: 560px; margin: 24px auto; padding: 16px 24px 24px; background: var(--card-background-color); border-radius: var(--ha-card-border-radius, 12px); box-shadow: var(--ha-card-box-shadow, none); border: 1px solid var(--divider-color); }
+    header { display: flex; align-items: center; gap: 8px; height: var(--header-height, 56px); padding: 0 12px; background: var(--app-header-background-color, var(--primary-color)); color: var(--app-header-text-color, #fff); font-size: 20px; }
+    header .title { flex: 1; }
+    header button { background: transparent; color: inherit; border: 1px solid currentColor; }
+    .card { max-width: 640px; margin: 24px auto; padding: 16px 24px 24px; background: var(--card-background-color); border-radius: var(--ha-card-border-radius, 12px); box-shadow: var(--ha-card-box-shadow, none); border: 1px solid var(--divider-color); }
     label { display: block; margin-top: 16px; font-size: 14px; color: var(--secondary-text-color); }
     input, select { box-sizing: border-box; width: 100%; margin-top: 4px; padding: 10px; font-size: 16px; color: var(--primary-text-color); background: var(--input-fill-color, transparent); border: 1px solid var(--input-idle-line-color, var(--divider-color)); border-radius: 4px; }
     input[readonly] { color: var(--disabled-text-color, var(--secondary-text-color)); border-style: dashed; }
-    label.check { display: flex; align-items: center; gap: 8px; margin-top: 24px; color: var(--primary-text-color); }
+    label.check { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--primary-text-color); }
+    label.check.top { margin-top: 24px; }
     label.check input { width: auto; margin: 0; }
     .note { font-size: 12px; color: var(--secondary-text-color); margin-top: 2px; }
     .actions { display: flex; align-items: center; gap: 12px; margin-top: 24px; }
@@ -22,31 +25,69 @@ const TEMPLATE = `
     .status { font-size: 14px; }
     .error { color: var(--error-color, #db4437); }
     .hint { font-size: 12px; color: var(--secondary-text-color); margin-top: 16px; }
-    [hidden] { display: none; }
+    ul { list-style: none; margin: 16px 0 0; padding: 0; }
+    li { display: flex; align-items: center; gap: 16px; padding: 12px 8px; border-top: 1px solid var(--divider-color); cursor: pointer; }
+    li:hover { background: var(--secondary-background-color); }
+    .avatar { flex: none; width: 48px; height: 48px; border-radius: 50%; background: var(--primary-color) center / cover; color: var(--text-primary-color, #fff); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+    .who { min-width: 0; }
+    .name { font-size: 16px; }
+    .details { font-size: 14px; color: var(--secondary-text-color); display: flex; flex-wrap: wrap; gap: 4px 16px; }
+    .details a { color: var(--primary-color); text-decoration: none; }
+    .empty { margin-top: 16px; color: var(--secondary-text-color); }
+    [hidden] { display: none !important; }
   </style>
-  <header><ha-menu-button></ha-menu-button><span>User-Directory</span></header>
-  <form class="card">
+  <header>
+    <ha-menu-button></ha-menu-button><span class="title">User-Directory</span>
+    <button id="to-editor">My info</button><button id="to-directory" hidden>Directory</button>
+  </header>
+  <div class="card" id="directory">
+    <input id="search" type="search" placeholder="Search" aria-label="Search">
+    <ul id="people"></ul>
+    <div class="empty" id="empty" hidden>No one is listed yet.</div>
+    <div class="hint">Click someone to save their contact card.</div>
+  </div>
+  <form class="card" id="editor" hidden>
     <div id="user-row" hidden>
       <label for="user">User</label>
       <select id="user"></select>
     </div>
-    ${FIELDS.map((f) => `<label for="${f.key}">${f.label}</label><input id="${f.key}" type="${f.type}" autocomplete="${f.autocomplete}"><div class="note" id="${f.key}-note" hidden></div>`).join("")}
-    <label class="check"><input id="gravatar" type="checkbox"> Use my Gravatar as my profile picture</label>
-    <div class="note" id="gravatar-note">Uses the email above. Turning it off puts your old picture back.</div>
-    <div class="hint">All fields are optional. Only you and admins can see or change them.</div>
+    <label class="check top"><input id="listed" type="checkbox"> List me in the User-Directory</label>
+    <div class="note" id="listed-note"></div>
+    ${FIELDS.map((f) => `<label for="${f.key}">${f.label}</label><input id="${f.key}" type="${f.type}" autocomplete="${f.autocomplete}"><div class="note" id="${f.key}-note" hidden></div>${f.social ? `<label class="check"><input id="share-${f.key}" type="checkbox"> Show in the directory</label>` : ""}`).join("")}
+    <label class="check top"><input id="gravatar" type="checkbox"> Use my Gravatar as my profile picture</label>
+    <div class="note" id="gravatar-note"></div>
+    <div class="hint">Everything is optional. Only you and admins can change it.</div>
     <div class="actions"><button type="submit">Save</button><span class="status"></span></div>
   </form>
 `;
+
+// vCard 3.0, the version phones import most reliably.
+function vcard(person) {
+  const esc = (v) => String(v).replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/([,;])/g, "\\$1");
+  const parts = person.name.trim().split(/\s+/);
+  const last = parts.length > 1 ? parts.pop() : "";
+  const lines = ["BEGIN:VCARD", "VERSION:3.0", `N:${esc(last)};${esc(parts.join(" "))};;;`, `FN:${esc(person.name)}`];
+  if (person.email) lines.push(`EMAIL;TYPE=INTERNET:${esc(person.email)}`);
+  if (person.phone) lines.push(`TEL;TYPE=CELL:${esc(person.phone)}`);
+  if (person.github) lines.push(`URL;TYPE=GitHub:https://github.com/${esc(person.github)}`);
+  lines.push("END:VCARD");
+  return lines.join("\r\n") + "\r\n";
+}
 
 class UserDirectoryPanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" }).innerHTML = TEMPLATE;
     this._loaded = false;
-    const root = this.shadowRoot;
-    root.querySelector("form").addEventListener("submit", (ev) => { ev.preventDefault(); this._save(); });
-    root.getElementById("user").addEventListener("change", () => this._load());
-    root.getElementById("gravatar").addEventListener("change", (ev) => this._setGravatar(ev.target));
+    this._people = [];
+    const $ = (id) => this.shadowRoot.getElementById(id);
+    this._$ = $;
+    $("editor").addEventListener("submit", (ev) => { ev.preventDefault(); this._save(); });
+    $("user").addEventListener("change", () => this._load());
+    $("gravatar").addEventListener("change", (ev) => this._setGravatar(ev.target));
+    $("search").addEventListener("input", () => this._render());
+    $("to-editor").addEventListener("click", () => this._view("editor"));
+    $("to-directory").addEventListener("click", () => this._view("directory"));
   }
 
   set hass(hass) {
@@ -63,30 +104,99 @@ class UserDirectoryPanel extends HTMLElement {
   }
 
   get _userId() {
-    return this.shadowRoot.getElementById("user").value || this._hass.user.id;
+    return this._$("user").value || this._hass.user.id;
+  }
+
+  _view(name) {
+    const editing = name === "editor";
+    this._$("editor").hidden = !editing;
+    this._$("directory").hidden = editing;
+    this._$("to-editor").hidden = editing;
+    this._$("to-directory").hidden = !editing;
+    if (editing) this._load();
+    else this._loadDirectory();
   }
 
   async _init() {
-    if (this._hass.user.is_admin) {
-      try {
-        const users = await this._hass.callWS({ type: "config/auth/list" });
-        const select = this.shadowRoot.getElementById("user");
-        users
-          .filter((u) => !u.system_generated)
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .forEach((u) => {
-            const opt = document.createElement("option");
-            opt.value = u.id;
-            opt.textContent = u.id === this._hass.user.id ? `${u.name} (you)` : u.name;
-            select.append(opt);
-          });
-        select.value = this._hass.user.id;
-        this.shadowRoot.getElementById("user-row").hidden = false;
-      } catch (err) {
-        // Not fatal: admins can still edit their own info.
-      }
+    this._loadDirectory();
+    if (!this._hass.user.is_admin) return;
+    try {
+      const users = await this._hass.callWS({ type: "config/auth/list" });
+      const select = this._$("user");
+      users
+        .filter((u) => !u.system_generated)
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .forEach((u) => {
+          const opt = document.createElement("option");
+          opt.value = u.id;
+          opt.textContent = u.id === this._hass.user.id ? `${u.name} (you)` : u.name;
+          select.append(opt);
+        });
+      select.value = this._hass.user.id;
+      this._$("user-row").hidden = false;
+    } catch (err) {
+      // Not fatal: admins can still edit their own info.
     }
-    this._load();
+  }
+
+  async _loadDirectory() {
+    try {
+      this._people = await this._hass.callWS({ type: "user_directory/directory/list" });
+    } catch (err) {
+      this._people = [];
+    }
+    this._render();
+  }
+
+  _render() {
+    const query = this._$("search").value.trim().toLowerCase();
+    const list = this._$("people");
+    list.replaceChildren();
+    const shown = this._people.filter((p) =>
+      [p.name, p.email, p.phone, p.github].some((v) => v && v.toLowerCase().includes(query)));
+    shown.forEach((p) => list.append(this._row(p)));
+    this._$("empty").hidden = shown.length > 0;
+  }
+
+  // Built with DOM calls, not innerHTML, because names and values come from users.
+  _row(person) {
+    const li = document.createElement("li");
+    li.title = `Save ${person.name}'s contact card`;
+    li.addEventListener("click", () => this._download(person));
+    const avatar = document.createElement("div");
+    avatar.className = "avatar";
+    if (person.picture) avatar.style.backgroundImage = `url("${encodeURI(person.picture)}")`;
+    else avatar.textContent = (person.name[0] || "?").toUpperCase();
+    const who = document.createElement("div");
+    who.className = "who";
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = person.name;
+    const details = document.createElement("div");
+    details.className = "details";
+    const link = (text, href) => {
+      const a = document.createElement("a");
+      a.textContent = text;
+      a.href = href;
+      a.addEventListener("click", (ev) => ev.stopPropagation());
+      if (href.startsWith("https:")) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+      details.append(a);
+    };
+    if (person.email) link(person.email, `mailto:${person.email}`);
+    if (person.phone) link(person.phone, `tel:${person.phone.replace(/[^\d+]/g, "")}`);
+    if (person.github) link(`GitHub: ${person.github}`, `https://github.com/${encodeURIComponent(person.github)}`);
+    who.append(name, details);
+    li.append(avatar, who);
+    return li;
+  }
+
+  _download(person) {
+    const url = URL.createObjectURL(new Blob([vcard(person)], { type: "text/vcard" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${person.name.replace(/[^\w\s-]/g, "").trim() || "contact"}.vcf`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   async _load() {
@@ -99,9 +209,14 @@ class UserDirectoryPanel extends HTMLElement {
   }
 
   async _save() {
-    const button = this.shadowRoot.querySelector("button");
-    const msg = { type: "user_directory/contact/update", user_id: this._userId };
-    FIELDS.forEach((f) => { msg[f.key] = this.shadowRoot.getElementById(f.key).value; });
+    const button = this.shadowRoot.querySelector("button[type=submit]");
+    const msg = {
+      type: "user_directory/contact/update",
+      user_id: this._userId,
+      listed: this._$("listed").checked,
+      shared: FIELDS.filter((f) => f.social && this._$(`share-${f.key}`).checked).map((f) => f.key),
+    };
+    FIELDS.forEach((f) => { msg[f.key] = this._$(f.key).value; });
     button.disabled = true;
     try {
       this._show(await this._hass.callWS(msg));
@@ -125,23 +240,30 @@ class UserDirectoryPanel extends HTMLElement {
     }
   }
 
-  // result: { contact, sso: [fields from SSO], locked: [fields only SSO may change], gravatar: { enabled, available } }
+  // result: see agents.md "Access control" for the shape.
   _show(result) {
-    const box = this.shadowRoot.getElementById("gravatar");
-    box.checked = result.gravatar.enabled;
-    box.disabled = !result.gravatar.available && !result.gravatar.enabled;
-    this.shadowRoot.getElementById("gravatar-note").textContent = result.gravatar.available
-      ? "Uses the email above. Turning it off puts your old picture back."
-      : "Needs a person linked to this user. Ask an admin to link one in Settings > People.";
     FIELDS.forEach((f) => {
-      const input = this.shadowRoot.getElementById(f.key);
-      const note = this.shadowRoot.getElementById(`${f.key}-note`);
+      const input = this._$(f.key);
+      const note = this._$(`${f.key}-note`);
       const locked = result.locked.includes(f.key);
       input.value = result.contact[f.key] || "";
       input.readOnly = locked;
       note.hidden = !result.sso.includes(f.key);
       note.textContent = locked ? "Managed by SSO. Change it in your identity provider." : "From SSO. Type to override.";
+      if (f.social) this._$(`share-${f.key}`).checked = result.shared.includes(f.key);
     });
+    const listed = this._$("listed");
+    listed.checked = result.listed;
+    listed.disabled = result.listed_locked;
+    this._$("listed-note").textContent = result.listed_locked
+      ? "An admin has made the directory required for you. Your name, picture, email and phone are shown to all users."
+      : "Shows your name, picture, email and phone to all users of this Home Assistant.";
+    const box = this._$("gravatar");
+    box.checked = result.gravatar.enabled;
+    box.disabled = !result.gravatar.available && !result.gravatar.enabled;
+    this._$("gravatar-note").textContent = result.gravatar.available
+      ? "Uses the email above. Turning it off puts your old picture back."
+      : "Needs a person linked to this user. Ask an admin to link one in Settings > People.";
   }
 
   _status(text, isError = false) {

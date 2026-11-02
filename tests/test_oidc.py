@@ -136,7 +136,7 @@ async def test_options_validate_and_save(
         result["flow_id"], ENABLED
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.options == ENABLED
+    assert entry.options == {**ENABLED, "publish_policy": "choice"}
     await hass.async_block_till_done()
 
     # Turning SSO off forgets the token.
@@ -144,7 +144,11 @@ async def test_options_validate_and_save(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_OIDC_ENABLED: False}
     )
-    assert entry.options == {CONF_OIDC_ENABLED: False, CONF_OIDC_ENFORCE: False}
+    assert entry.options == {
+        "publish_policy": "choice",
+        CONF_OIDC_ENABLED: False,
+        CONF_OIDC_ENFORCE: False,
+    }
 
 
 async def test_sso_fills_empty_fields(
@@ -229,4 +233,7 @@ async def test_unmatched_users_untouched(
         "sso": [],
         "locked": [],
         "gravatar": {"enabled": False, "available": False},
+        "listed": False,
+        "listed_locked": False,
+        "shared": [],
     }

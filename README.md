@@ -1,7 +1,8 @@
 # ha-user-directory for Home Assistant
 
-Lets each Home Assistant user add their own email, phone and GitHub username,
-and use their [Gravatar](https://gravatar.com) as their profile picture. Everything is optional.
+A phone book of the users on your Home Assistant. Each user can add their email, phone
+and GitHub username, choose what's shown, and use their [Gravatar](https://gravatar.com)
+as their profile picture.
 
 [![Open your Home Assistant instance and open this repository in the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=pasta-up&repository=ha-user-directory&category=integration)
 
@@ -14,17 +15,26 @@ and use their [Gravatar](https://gravatar.com) as their profile picture. Everyth
 
 Or copy `custom_components/user_directory` into your config's `custom_components` folder.
 
+Moving from Profile Extender? Remove it first, then install this as above.
+Info entered in Profile Extender isn't carried over.
+
 ## Use
 
-Open **User-Directory** in the sidebar, fill in what you want, and save.
+Open **User-Directory** in the sidebar to see everyone who's listed. Click someone to save
+their contact card.
 
-- Users can only see and change their own info.
-- Admins can pick any user from a list at the top.
-- Removing a user removes their info. Removing the integration removes everyone's.
+Click **My info** to add your own details:
+
+- **List me in the User-Directory** shows your name, picture, email and phone to all users.
+- Social links like GitHub only show if you tick **Show in the directory** next to them.
+- Only you and admins can change your info. Admins can pick any user at the top.
+
+Admins choose who's listed under **ha-user-directory** > **Configure**: users choose
+for themselves (default), SSO users always, or everyone.
 
 ## Gravatar
 
-Tick **Use my Gravatar as my profile picture**. Your picture becomes the Gravatar for
+In **My info**, tick **Use my Gravatar as my profile picture**. Your picture becomes the Gravatar for
 your email, and refreshes every 6 hours and whenever the email changes. Untick it to get
 your old picture back.
 

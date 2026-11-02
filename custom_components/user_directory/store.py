@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
@@ -12,8 +13,10 @@ from .const import (
     CONF_GITHUB,
     CONF_PHONE,
     CONTACT_FIELDS,
+    POLICY_CHOICE,
     STORAGE_KEY,
     STORAGE_KEY_OIDC,
+    STORAGE_KEY_SETTINGS,
     STORAGE_VERSION,
 )
 
@@ -63,7 +66,13 @@ def _is_valid(field: str, value: str) -> bool:
 class ContactStore:
     """Contact info keyed by user ID: what users entered, and what SSO provided."""
 
-    def __init__(self, hass: HomeAssistant, *, enforce_oidc: bool = False) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        *,
+        enforce_oidc: bool = False,
+        policy: str = POLICY_CHOICE,
+    ) -> None:
         """Create the store; call async_load before use."""
         # private=True keeps the files readable by the HA user only.
         self._manual_store: Store[dict[str, Contact]] = Store(
@@ -72,14 +81,44 @@ class ContactStore:
         self._oidc_store: Store[dict[str, Contact]] = Store(
             hass, STORAGE_VERSION, STORAGE_KEY_OIDC, private=True
         )
+        # {user_id: {"listed": bool, "shared": [social fields]}}
+        self._settings_store: Store[dict[str, dict[str, Any]]] = Store(
+            hass, STORAGE_VERSION, STORAGE_KEY_SETTINGS, private=True
+        )
         self._manual: dict[str, Contact] = {}
         self._oidc: dict[str, Contact] = {}
+        self._settings: dict[str, dict[str, Any]] = {}
         self.enforce_oidc = enforce_oidc
+        self.policy = policy
 
     async def async_load(self) -> None:
         """Load saved contacts."""
         self._manual = await self._manual_store.async_load() or {}
         self._oidc = await self._oidc_store.async_load() or {}
+        self._settings = await self._settings_store.async_load() or {}
+
+    def listed_choice(self, user_id: str) -> bool:
+        """Return whether the user chose to be listed. Policy may override; see directory.py."""
+        return self._settings.get(user_id, {}).get("listed", False)
+
+    def shared(self, user_id: str) -> list[str]:
+        """Return the social fields the user shows in the directory."""
+        return list(self._settings.get(user_id, {}).get("shared", []))
+
+    async def async_set_settings(
+        self,
+        user_id: str,
+        *,
+        listed: bool | None = None,
+        shared: list[str] | None = None,
+    ) -> None:
+        """Update a user's directory settings; None leaves a value unchanged."""
+        settings = self._settings.setdefault(user_id, {})
+        if listed is not None:
+            settings["listed"] = listed
+        if shared is not None:
+            settings["shared"] = shared
+        await self._settings_store.async_save(self._settings)
 
     def get(self, user_id: str) -> Contact:
         """Return a user's contact info. SSO fills gaps, or wins when enforced."""
@@ -122,6 +161,8 @@ class ContactStore:
     async def async_remove_user(self, user_id: str) -> None:
         """Forget a user."""
         await self.async_set(user_id, {})
+        if self._settings.pop(user_id, None) is not None:
+            await self._settings_store.async_save(self._settings)
         if user_id in self._oidc:
             await self.async_set_oidc(
                 {uid: c for uid, c in self._oidc.items() if uid != user_id}
@@ -136,4 +177,6 @@ class ContactStore:
         """Delete both storage files."""
         self._manual = {}
         await self._manual_store.async_remove()
+        self._settings = {}
+        await self._settings_store.async_remove()
         await self.async_clear_oidc()

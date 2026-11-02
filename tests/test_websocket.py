@@ -19,6 +19,9 @@ async def test_own_contact(
         "sso": [],
         "locked": [],
         "gravatar": {"enabled": False, "available": False},
+        "listed": False,
+        "listed_locked": False,
+        "shared": [],
     }
 
     await client.send_json_auto_id(

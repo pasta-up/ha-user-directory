@@ -29,8 +29,11 @@ from .const import (
     CONF_OIDC_ENABLED,
     CONF_OIDC_ENFORCE,
     CONF_OIDC_PROVIDER,
+    CONF_PUBLISH_POLICY,
     DOMAIN,
-    PANEL_TITLE,
+    INTEGRATION_TITLE,
+    POLICIES,
+    POLICY_CHOICE,
 )
 from .oidc import AuthentikSync, OidcError, active_providers
 
@@ -45,7 +48,7 @@ class UserDirectoryConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Confirm setup."""
         if user_input is not None:
-            return self.async_create_entry(title=PANEL_TITLE, data={})
+            return self.async_create_entry(title=INTEGRATION_TITLE, data={})
         return self.async_show_form(step_id="user")
 
     @staticmethod
@@ -57,12 +60,12 @@ class UserDirectoryConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class UserDirectoryOptionsFlow(OptionsFlowWithReload):
-    """Turn SSO contact sync on or off. Options flows are admin-only."""
+    """Directory policy and SSO contact sync. Options flows are admin-only."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage SSO settings."""
+        """Manage the directory policy and SSO settings."""
         providers = active_providers(self.hass)
         current = self.config_entry.options
         errors: dict[str, str] = {}
@@ -75,7 +78,11 @@ class UserDirectoryOptionsFlow(OptionsFlowWithReload):
             options = {**user_input, CONF_AUTHENTIK_TOKEN: token}
             if not user_input[CONF_OIDC_ENABLED]:
                 return self.async_create_entry(
-                    data={CONF_OIDC_ENABLED: False, CONF_OIDC_ENFORCE: False}
+                    data={
+                        CONF_PUBLISH_POLICY: user_input[CONF_PUBLISH_POLICY],
+                        CONF_OIDC_ENABLED: False,
+                        CONF_OIDC_ENFORCE: False,
+                    }
                 )
             if not providers:
                 errors["base"] = "provider_not_active"
@@ -90,7 +97,16 @@ class UserDirectoryOptionsFlow(OptionsFlowWithReload):
                     return self.async_create_entry(data=options)
 
         schema: dict[Any, Any] = {
-            probatio.Required(CONF_OIDC_ENABLED, default=False): BooleanSelector()
+            probatio.Required(
+                CONF_PUBLISH_POLICY, default=POLICY_CHOICE
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(POLICIES),
+                    mode=SelectSelectorMode.LIST,
+                    translation_key=CONF_PUBLISH_POLICY,
+                )
+            ),
+            probatio.Required(CONF_OIDC_ENABLED, default=False): BooleanSelector(),
         }
         if providers:
             schema[

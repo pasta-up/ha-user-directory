@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "ha-user-directory",
-        "description": "Adds a User-Directory page to the sidebar where each user can set their email, phone and GitHub username."
+        "description": "Adds a User-Directory page to the sidebar: a phone book of the users on this server, where each user can also edit their own contact info."
       }
     },
     "abort": {
@@ -13,15 +13,17 @@
   "options": {
     "step": {
       "init": {
-        "title": "Single sign-on",
-        "description": "Fill in contact info from your SSO identity provider. Supported SSO integration: {status}. API token saved: {token_saved}.",
+        "title": "ha-user-directory",
+        "description": "Who appears in the User-Directory, and optional single sign-on. Supported SSO integration: {status}. API token saved: {token_saved}.",
         "data": {
+          "publish_policy": "Who is listed in the directory",
           "oidc_enabled": "Use SSO contact info",
           "oidc_provider": "SSO integration",
           "authentik_token": "Authentik API token",
           "oidc_enforce": "Enforce SSO contact info"
         },
         "data_description": {
+          "publish_policy": "Listed users show their name, picture, email and phone to every user. Social links only show if each user turns them on.",
           "oidc_enabled": "Only available when a supported SSO integration is set up and working. Turning this off forgets the token and the SSO values.",
           "authentik_token": "Token for an Authentik service account that can only view users. Leave blank to keep the saved token.",
           "oidc_enforce": "When on, fields filled from SSO can't be changed in Home Assistant, only in Authentik. When off, SSO only fills fields the user left empty."
@@ -34,6 +36,15 @@
       "invalid_token": "Authentik rejected the API token, or it can't view users.",
       "cannot_connect": "Can't reach the SSO identity provider.",
       "unsupported_idp": "The SSO identity provider isn't Authentik. Only Authentik is supported."
+    }
+  },
+  "selector": {
+    "publish_policy": {
+      "options": {
+        "choice": "Users choose for themselves",
+        "oidc": "SSO users always; others choose",
+        "all": "All users"
+      }
     }
   }
 }
