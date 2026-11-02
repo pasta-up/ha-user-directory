@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Profile Extender",
+        "description": "Adds a Contact info page to the sidebar where each user can set their email, phone and GitHub username."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Profile Extender is already set up."
+    }
+  }
+}
