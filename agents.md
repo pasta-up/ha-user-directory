@@ -97,9 +97,17 @@ Needs Python 3.14 (HA 2026.10). `home-assistant-frontend` is in
 SSO tests fake auth_oidc by inserting into `hass.auth._providers` and mock Authentik
 with `aioclient_mock`.
 
+## Releases
+
+HACS offers updates from GitHub releases, comparing the tag with the installed
+`manifest.json` version. To release:
+
+1. Bump `version` in `manifest.json` (semver), commit, push, wait for CI.
+2. `gh release create vX.Y.Z --title vX.Y.Z --notes "..."`. Notes are shown in HA's update dialog.
+3. `release.yml` fails if the tag and manifest version differ; fix and re-release.
+
 ## Not done yet
 
-- No GitHub release.
 - Do not submit to `hacs/default`: the owner wants it installed as a custom repository only.
 - Not tested on a live HA instance (panel UI and real Authentik untested).
 - Contact info isn't exposed to automations/notify yet (possible next step:
